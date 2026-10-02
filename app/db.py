@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS reports (
                       CHECK (source IN ('whatsapp', 'gmail', 'upload', 'gmail_import')),
     file_path         TEXT NOT NULL,
     sha256            TEXT NOT NULL UNIQUE,
-    is_scanned        INTEGER NOT NULL DEFAULT 0,
+    is_scanned        INTEGER NOT NULL DEFAULT 0 CHECK (is_scanned IN (0, 1)),
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     patient_name_raw  TEXT,                 -- as printed; patient_id is set once matching exists
     patient_age_raw   TEXT,

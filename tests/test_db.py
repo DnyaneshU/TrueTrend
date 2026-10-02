@@ -85,3 +85,8 @@ def test_failed_replace_keeps_old_report(conn):
 def test_unknown_source_rejected(conn):
     with pytest.raises(sqlite3.IntegrityError):
         db.save_report(conn, make_report(source="fax"), [])
+
+
+def test_is_scanned_must_be_0_or_1(conn):
+    with pytest.raises(sqlite3.IntegrityError):
+        db.save_report(conn, make_report(is_scanned=2), [])

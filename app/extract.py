@@ -14,9 +14,12 @@ from typing import Literal
 
 import pymupdf
 
-SCAN_TEXT_THRESHOLD = 50  # fewer non-whitespace characters than this: treat the page as scanned
+SCAN_TEXT_THRESHOLD = 50          # fewer visible characters than this: the page is a scan
+IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
+IMAGE_PAGE_COVERAGE = 0.5         # of the page (a scan with a typed header or footer)
 RENDER_DPI = 150
-COLUMN_GAP = 0.6          # a gap wider than this × text height separates table columns
+COLUMN_GAP = 0.6                  # a gap wider than this × text height separates table columns
+WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES  # "ﬁ" comes out as "fi"
 
 
 class ExtractError(Exception):
@@ -60,7 +63,7 @@ def page_text(page: pymupdf.Page) -> str:
     read left to right. A gap wider than COLUMN_GAP × text height becomes " | ",
     so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
-    words = [word[:5] for word in page.get_text("words")]  # (x0, y0, x1, y1, text)
+    words = [word[:5] for word in page.get_text("words", flags=WORD_FLAGS)]  # (x0, y0, x1, y1, text)
     if not words:
         return ""
     height = statistics.median(y1 - y0 for _, y0, _, y1, _ in words) or 1.0
@@ -90,7 +93,7 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
     pages = []
     for number, page in enumerate(doc, start=1):
         text = page_text(page)
-        if _looks_scanned(text):
+        if _looks_scanned(page, text):
             png = page.get_pixmap(dpi=RENDER_DPI).tobytes("png")
             pages.append(PageInput(number, doc.page_count, "vision", image=png))
         else:
@@ -98,5 +101,15 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
     return pages
 
 
-def _looks_scanned(text: str) -> bool:
-    return len("".join(text.split())) < SCAN_TEXT_THRESHOLD
+def _looks_scanned(page: pymupdf.Page, text: str) -> bool:
+    """True when the page's content is in an image rather than in its text."""
+    visible = len("".join(text.split()))
+    if visible < SCAN_TEXT_THRESHOLD:
+        return True
+    return visible < IMAGE_PAGE_TEXT_THRESHOLD and _image_coverage(page) >= IMAGE_PAGE_COVERAGE
+
+
+def _image_coverage(page: pymupdf.Page) -> float:
+    """Share of the page covered by images, 0 to 1 (overlaps count twice, hence the cap)."""
+    covered = sum(abs(pymupdf.Rect(info["bbox"]) & page.rect) for info in page.get_image_info())
+    return min(covered / abs(page.rect), 1.0)
