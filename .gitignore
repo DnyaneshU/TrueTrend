@@ -1,0 +1,26 @@
+# Real reports and patient data never go into the repo:
+# the database (and SQLite's -journal/-wal/-shm side files), report PDFs and photos.
+storage/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.webp
+/out*.json
+# ...except synthetic sample reports and the web app's icons
+!samples/**
+!web/icons/**
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Secrets
+.env
