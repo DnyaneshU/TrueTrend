@@ -2,287 +2,23 @@
 
     python -m app.extract path/to/report.pdf [--force] [--model gemma4:e2b]
 
-One Gemma call per page. Digital pages are sent as text rebuilt line by line;
-pages with almost no text (scans) are sent as an image. Gemma copies values
-exactly as printed; code assigns page numbers, parses dates and saves the rows.
-Every saved row is `needs_check` until verify.py exists.
+One Gemma call per page (app.pages, app.gemma). This module merges the pages'
+answers into one report: page numbers come from code, report details are taken
+from the first page that prints them, and rows that can't be trusted are dropped
+with a warning. Every saved row is `needs_check` until verify.py exists.
 """
-import re
-import statistics
 import sys
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime
-from pathlib import Path
-from typing import Callable, Literal
+from typing import Callable
 
-import httpx
-import ollama
-import pymupdf
-from dateutil import parser as dateparser
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
-DEFAULT_MODEL = "gemma4:e4b"
-OLLAMA_OPTIONS = {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
-RETRY_TEMPERATURE = 0.3   # a second temperature-0 call would usually repeat the same broken reply
-SCAN_TEXT_THRESHOLD = 50         # fewer visible characters than this: the page is a scan
-IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
-IMAGE_PAGE_COVERAGE = 0.5         # of the page (a scan with a typed header or footer)
-RENDER_DPI = 150
-COLUMN_GAP = 0.6                  # a gap wider than this × text height separates table columns
-WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES  # "ﬁ" comes out as "fi"
-
-
-class ExtractError(Exception):
-    """A problem the user can fix. main() prints it as one line and exits with 1."""
-
-
-@dataclass(frozen=True)
-class PageInput:
-    number: int                      # 1-based, assigned by code
-    total: int
-    mode: Literal["text", "vision"]
-    text: str = ""
-    image: bytes | None = None       # PNG, vision pages only
-
-
-def open_pdf(path: Path) -> pymupdf.Document:
-    """Open a report PDF, or raise ExtractError saying in one sentence why not."""
-    if not path.is_file():
-        raise ExtractError(f"File not found: {path}")
-    try:
-        doc = pymupdf.open(path)
-    except RuntimeError:  # pymupdf.FileDataError and friends
-        raise ExtractError(f"Not a readable PDF: {path}") from None
-    if not doc.is_pdf:
-        problem = f"Not a PDF: {path}"
-    elif doc.needs_pass:
-        problem = (f"{path.name} is password-protected. Open it once, save a copy "
-                   "without a password, and run this on the copy.")
-    elif doc.page_count == 0:
-        problem = f"{path.name} has no pages."
-    else:
-        return doc
-    doc.close()
-    raise ExtractError(problem)
-
-
-def page_text(page: pymupdf.Page) -> str:
-    """The page's text rebuilt one printed line at a time.
-
-    Words whose vertical centres are within half a text height form one line,
-    read left to right. A gap wider than COLUMN_GAP × text height becomes " | ",
-    so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
-    """
-    words = [word[:5] for word in page.get_text("words", flags=WORD_FLAGS)]  # (x0, y0, x1, y1, text)
-    if not words:
-        return ""
-    height = statistics.median(y1 - y0 for _, y0, _, y1, _ in words) or 1.0
-    lines: list[list[tuple]] = []
-    line_centre = 0.0
-    for word in sorted(words, key=lambda w: ((w[1] + w[3]) / 2, w[0])):
-        centre = (word[1] + word[3]) / 2
-        if lines and centre - line_centre <= height / 2:
-            lines[-1].append(word)
-        else:
-            lines.append([word])
-            line_centre = centre
-    return "\n".join(_join_line(sorted(line), height) for line in lines)
-
-
-def _join_line(words: list[tuple], height: float) -> str:
-    """One line's words, left to right, with " | " wherever the gap is a column break."""
-    parts = [words[0][4]]
-    for (_, _, previous_x1, _, _), (x0, _, _, _, text) in zip(words, words[1:]):
-        parts.append(" | " if x0 - previous_x1 > COLUMN_GAP * height else " ")
-        parts.append(text)
-    return "".join(parts)
-
-
-def read_pages(doc: pymupdf.Document) -> list[PageInput]:
-    """One PageInput per page: its rebuilt text, or a PNG of the page if it looks scanned."""
-    pages = []
-    for number, page in enumerate(doc, start=1):
-        text = page_text(page)
-        if _looks_scanned(page, text):
-            png = page.get_pixmap(dpi=RENDER_DPI).tobytes("png")
-            pages.append(PageInput(number, doc.page_count, "vision", image=png))
-        else:
-            pages.append(PageInput(number, doc.page_count, "text", text=text))
-    return pages
-
-
-def _looks_scanned(page: pymupdf.Page, text: str) -> bool:
-    """True when the page's content is in an image rather than in its text."""
-    visible = len("".join(text.split()))
-    if visible < SCAN_TEXT_THRESHOLD:
-        return True
-    return visible < IMAGE_PAGE_TEXT_THRESHOLD and _image_coverage(page) >= IMAGE_PAGE_COVERAGE
-
-
-def _image_coverage(page: pymupdf.Page) -> float:
-    """Share of the page covered by images, 0 to 1 (overlaps count twice, hence the cap)."""
-    covered = sum(abs(pymupdf.Rect(info["bbox"]) & page.rect) for info in page.get_image_info())
-    return min(covered / abs(page.rect), 1.0)
-
-
-_ISO_DATE = re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b")
-_DEFAULT_A, _DEFAULT_B = datetime(2000, 1, 1), datetime(2001, 2, 2)
-
-
-def parse_date(text: str | None) -> str | None:
-    """A printed date as ISO YYYY-MM-DD, read day-first (Indian DD/MM/YYYY).
-
-    Returns None for missing, partial ("Sep 2026") or unreadable text. Parsing
-    twice with different defaults catches parts dateutil would silently fill in.
-    """
-    if not text or not text.strip():
-        return None
-    iso = _ISO_DATE.search(text)
-    if iso:
-        try:
-            return date(*map(int, iso.groups())).isoformat()
-        except ValueError:
-            return None
-    try:
-        first = dateparser.parse(text, dayfirst=True, fuzzy=True, default=_DEFAULT_A)
-        second = dateparser.parse(text, dayfirst=True, fuzzy=True, default=_DEFAULT_B)
-    except (ValueError, OverflowError):
-        return None
-    if first.date() != second.date():  # day, month or year was missing and came from the default
-        return None
-    return first.date().isoformat()
-
-
-TestCode = Literal[
-    "HBA1C", "GLU_F", "GLU_PP", "TSH", "FT4", "CHOL", "LDL", "HDL",
-    "TG", "CREAT", "HB", "VITD", "B12", "URIC", "UREA",
-]
-
-
-class ExtractedResult(BaseModel):
-    test_code: TestCode
-    raw_name: str
-    value_text: str
-    unit: str | None
-    ref_text: str | None
-
-
-class PageExtraction(BaseModel):
-    patient_name: str | None
-    age: str | None
-    sex: str | None
-    lab_name: str | None
-    sample_date: str | None
-    report_date: str | None
-    results: list[ExtractedResult]
-
-
-PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
-
-SYSTEM_PROMPT = """You read one page of an Indian medical laboratory report and copy data exactly as printed.
-Never calculate, convert, round, translate or guess. If something is not printed on this page, use null.
-
-Fields:
-- patient_name, age, sex, lab_name: exactly as printed on this page, or null.
-- sample_date: the sample COLLECTION date and time as printed (labels such as "Collected", "Sample Collected On", "Collection Date", "Drawn"). Not the registration date and not the report date.
-- report_date: the date the report was released, as printed (labels such as "Reported", "Report Date", "Reported On").
-- results: one entry for each result of ONLY these tests:
-  HBA1C  = HbA1c, Glycated / Glycosylated Haemoglobin
-  GLU_F  = Fasting blood or plasma glucose, FBS, Fasting Blood Sugar
-  GLU_PP = Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose
-  TSH    = TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)
-  FT4    = Free T4, FT4, Free Thyroxine
-  CHOL   = Total Cholesterol
-  LDL    = LDL Cholesterol (direct or calculated)
-  HDL    = HDL Cholesterol
-  TG     = Triglycerides
-  CREAT  = Serum Creatinine
-  HB     = Haemoglobin / Hemoglobin / Hb
-  VITD   = 25-Hydroxy (25-OH) Vitamin D, Vitamin D Total
-  B12    = Vitamin B12, Cyanocobalamin
-  URIC   = Uric Acid
-  UREA   = Urea, Blood Urea, Serum Urea
-  Do NOT include: Total T4 or T4, T3, LDL/HDL or other ratios, VLDL, non-HDL cholesterol, Estimated Average Glucose, Mean Blood Glucose, Random Blood Sugar, BUN / Blood Urea Nitrogen, any urine test, or any other test.
-  Haemoglobin (HB) and HbA1c are different tests.
-  For each result: raw_name = the test name exactly as printed; value_text = the result exactly as printed (keep "<", ">" and all decimals); unit = as printed, or null; ref_text = the reference range exactly as printed, or null.
-  If none of these tests are on this page, results is [].
-In the page text, each line is one printed line and " | " separates table columns.
-Reply with compact JSON on a single line, no indentation."""
-
-
-def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
-    """One Gemma call for one page.
-
-    Raises pydantic.ValidationError if the reply does not fit the schema, and
-    ExtractError if Ollama is unreachable, the model is missing or the connection drops.
-    """
-    intro = f"Page {page.number} of {page.total}."
-    if page.mode == "vision":
-        user = {"role": "user", "content": f"{intro} The page is attached as an image.",
-                "images": [page.image]}
-    else:
-        user = {"role": "user", "content": f"{intro} Page text:\n\n{page.text}"}
-    options = dict(OLLAMA_OPTIONS, temperature=RETRY_TEMPERATURE) if retry else dict(OLLAMA_OPTIONS)
-    try:
-        response = ollama.chat(
-            model=model,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, user],
-            format=PAGE_SCHEMA,
-            options=options,
-            think=False,
-        )
-    except ConnectionError:
-        raise ExtractError(
-            "Can't reach Ollama. Start the Ollama app (or run: ollama serve) and try again."
-        ) from None
-    except ollama.ResponseError as error:
-        if error.status_code == 404:
-            raise ExtractError(f"Model {model} is not installed. Run: ollama pull {model}") from None
-        raise ExtractError(f"Ollama error: {error.error}") from None
-    except httpx.TransportError:
-        raise ExtractError(
-            "Lost the connection to Ollama while reading the report. Is it still running?"
-        ) from None
-    return PageExtraction.model_validate_json(response.message.content)
-
-
-# Code checks Gemma's test_code against the printed name, because Gemma (vision mode
-# especially) sometimes files a look-alike under an MVP code: seen "Estimated Average
-# Glucose" as GLU_F and "Total T4" as FT4. Per code: (the name must match, the name
-# must not match), case-insensitive.
-NAME_RULES: dict[str, tuple[str, str | None]] = {
-    "HBA1C": (r"a1c|glyc", None),
-    "GLU_F": (r"fasting|\bf(bs|bg|pg)?\b",
-              r"estimated|average|mean|random|\brbs\b|post|prandial|\bpp|urine"),
-    "GLU_PP": (r"post|prandial|\bpp|\b(2|two)[\s-]*h(ou)?rs?\b",
-               r"estimated|average|mean|random|\brbs\b|fasting|urine"),
-    "TSH": (r"\btsh\b|thyroid stimulating", r"\bf?t[34]\b"),
-    "FT4": (r"free|\bft4\b", r"total|\bf?t3\b|\btsh\b"),
-    "CHOL": (r"cholesterol|\bchol\b|\btc\b", r"hdl|ldl|\bnon|ratio"),
-    "LDL": (r"\bldl", r"vldl|hdl|\bnon|ratio"),
-    "HDL": (r"\bhdl", r"ldl|\bnon|ratio"),
-    "TG": (r"triglyceride|\btg\b|\btrig\b", r"ratio"),
-    "CREAT": (r"creat", r"urine|clearance|ratio|egfr|kinase|\bc?pk\b|\bck\b"),
-    "HB": (r"h(a)?emoglobin|\bhb\b|\bhgb\b", r"a1c|glyc"),
-    "VITD": (r"vit(amin)?\.?\s*d|hydroxy|\b25\b|cholecalciferol", r"1[,\s]*25|dihydroxy"),
-    "B12": (r"b\s*12|cobalamin", None),
-    "URIC": (r"uric", r"urine"),
-    "UREA": (r"urea", r"nitrogen|\bbun\b|urine"),
-}
-_NAME_PATTERNS = {
-    code: (re.compile(must, re.IGNORECASE), must_not and re.compile(must_not, re.IGNORECASE))
-    for code, (must, must_not) in NAME_RULES.items()
-}
-
-
-def name_conflict(test_code: str, raw_name: str) -> str | None:
-    """Why the printed test name can't be `test_code`, or None if it fits."""
-    must, must_not = _NAME_PATTERNS[test_code]
-    if must.search(raw_name) and not (must_not and must_not.search(raw_name)):
-        return None
-    return f"'{raw_name}' is not {test_code}"
-
+from app.dates import parse_date
+from app.errors import ExtractError
+from app.gemma import PageExtraction
+from app.lab_tests import name_conflict
+from app.pages import PageInput
 
 HEADER_FIELDS = ("patient_name", "age", "sex", "lab_name", "sample_date", "report_date")
 DATE_FIELDS = ("sample_date", "report_date")
@@ -303,17 +39,35 @@ def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def _clean(text: str | None) -> str | None:
-    """Collapse whitespace; empty text becomes None."""
-    if text is None:
-        return None
-    return " ".join(text.split()) or None
+def extract_pages(pages: list[PageInput], ask: Ask) -> Extraction:
+    """Ask Gemma about each page and merge the answers into one report."""
+    out = Extraction(header=dict.fromkeys(HEADER_FIELDS))
+    header_page: dict[str, int] = {}   # which page each header value came from
+    for page in pages:
+        started = time.perf_counter()
+        reply = _ask_with_retry(ask, page)
+        seconds = round(time.perf_counter() - started, 1)
+        out.replies.append({"page": page.number, "mode": page.mode,
+                            "reply": reply.model_dump() if reply else None})
+        if reply is None:
+            out.pages.append({"page": page.number, "mode": "failed", "results": 0, "seconds": seconds})
+            out.warnings.append(f"page {page.number}: Gemma's answer was unreadable twice; page skipped")
+            log(f"page {page.number}/{page.total} · {page.mode} · FAILED · {seconds} s")
+            continue
+        out.warnings += _merge_header(out.header, header_page, reply, page.number)
+        rows, row_warnings = _clean_rows(reply, page.number)
+        out.results += rows
+        out.warnings += row_warnings
+        out.pages.append({"page": page.number, "mode": page.mode, "results": len(rows), "seconds": seconds})
+        log(f"page {page.number}/{page.total} · {page.mode} · {_count(len(rows), 'result')} · {seconds} s")
 
-
-def _same(field_name: str, a: str, b: str) -> bool:
-    if field_name in DATE_FIELDS and parse_date(a) is not None:
-        return parse_date(a) == parse_date(b)
-    return a.casefold() == b.casefold()
+    if all(p["mode"] == "failed" for p in out.pages):
+        raise ExtractError(
+            "Gemma's answer was unreadable for every page, so nothing was saved. "
+            "Try again, or try --model gemma4:e2b."
+        )
+    out.warnings += _repeat_warnings(out.results)
+    return out
 
 
 def _ask_with_retry(ask: Ask, page: PageInput) -> PageExtraction | None:
@@ -325,70 +79,73 @@ def _ask_with_retry(ask: Ask, page: PageInput) -> PageExtraction | None:
     return None
 
 
-def extract_pages(pages: list[PageInput], ask: Ask) -> Extraction:
-    """Ask Gemma about each page and merge the answers into one report."""
-    out = Extraction(header=dict.fromkeys(HEADER_FIELDS))
-    header_page: dict[str, int] = {}
-    for page in pages:
-        started = time.perf_counter()
-        reply = _ask_with_retry(ask, page)
-        seconds = round(time.perf_counter() - started, 1)
-        if reply is None:
-            out.pages.append({"page": page.number, "mode": "failed", "results": 0, "seconds": seconds})
-            out.replies.append({"page": page.number, "mode": page.mode, "reply": None})
-            out.warnings.append(f"page {page.number}: Gemma's answer was unreadable twice; page skipped")
-            log(f"page {page.number}/{page.total} · {page.mode} · FAILED · {seconds} s")
+def _merge_header(header: dict, header_page: dict, reply: PageExtraction, page_number: int) -> list[str]:
+    """Fill header fields this page prints for the first time; warn where it disagrees."""
+    warnings = []
+    for name in HEADER_FIELDS:
+        value = _clean(getattr(reply, name))
+        if value is None:
             continue
-        out.replies.append({"page": page.number, "mode": page.mode, "reply": reply.model_dump()})
+        if header[name] is None:
+            header[name], header_page[name] = value, page_number
+        elif not _same(name, header[name], value):
+            first = header_page[name]
+            warnings.append(f"page {page_number}: {name} '{value}' differs from page {first} "
+                            f"('{header[name]}'); kept page {first}")
+    return warnings
 
-        for name in HEADER_FIELDS:
-            value = _clean(getattr(reply, name))
-            if value is None:
-                continue
-            if out.header[name] is None:
-                out.header[name], header_page[name] = value, page.number
-            elif not _same(name, out.header[name], value):
-                first = header_page[name]
-                out.warnings.append(
-                    f"page {page.number}: {name} '{value}' differs from page {first} "
-                    f"('{out.header[name]}'); kept page {first}"
-                )
 
-        kept = 0
-        for row in reply.results:
-            raw_name = _clean(row.raw_name) or ""
-            value_text = _clean(row.value_text)
-            if value_text is None:
-                out.warnings.append(f"page {page.number}: {row.test_code} had no value; row dropped")
-                continue
-            conflict = name_conflict(row.test_code, raw_name)
-            if conflict:
-                out.warnings.append(f"page {page.number}: {conflict}; row dropped")
-                continue
-            out.results.append({
-                "page": page.number,
-                "test_code": row.test_code,
-                "raw_name": raw_name,
-                "value_text": value_text,
-                "unit": _clean(row.unit),
-                "ref_text": _clean(row.ref_text),
-            })
-            kept += 1
-        out.pages.append({"page": page.number, "mode": page.mode, "results": kept, "seconds": seconds})
-        log(f"page {page.number}/{page.total} · {page.mode} · {kept} result{'' if kept == 1 else 's'} · {seconds} s")
+def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[dict], list[str]]:
+    """The page's results, tidied, and warnings for the rows dropped as untrustworthy."""
+    rows, warnings, seen = [], [], set()
+    for row in reply.results:
+        raw_name, value_text, unit = _clean(row.raw_name), _clean(row.value_text), _clean(row.unit)
+        if value_text is None:
+            problem = f"{row.test_code} had no value"
+        elif raw_name is None:
+            problem = f"{row.test_code} had no test name"
+        else:
+            problem = name_conflict(row.test_code, raw_name)
+        if problem:
+            warnings.append(f"page {page_number}: {problem}; row dropped")
+            continue
+        if (row.test_code, value_text, unit) in seen:
+            warnings.append(f"page {page_number}: {row.test_code} {value_text} was listed twice; kept once")
+            continue
+        seen.add((row.test_code, value_text, unit))
+        rows.append({
+            "page": page_number,
+            "test_code": row.test_code,
+            "raw_name": raw_name,
+            "value_text": value_text,
+            "unit": unit,
+            "ref_text": _clean(row.ref_text),
+        })
+    return rows, warnings
 
-    if all(p["mode"] == "failed" for p in out.pages):
-        raise ExtractError(
-            "Gemma's answer was unreadable for every page, so nothing was saved. "
-            "Try again, or try --model gemma4:e2b."
-        )
 
-    found_on: dict[str, list[int]] = {}
-    for result in out.results:
-        found_on.setdefault(result["test_code"], []).append(result["page"])
-    for code, on_pages in found_on.items():
-        if len(on_pages) > 1:
-            out.warnings.append(
-                f"{code} appears {len(on_pages)} times (pages {', '.join(map(str, on_pages))}); all kept"
-            )
-    return out
+def _repeat_warnings(results: list[dict]) -> list[str]:
+    """A test found more than once is kept each time; say so."""
+    pages_by_code: dict[str, list[int]] = {}
+    for result in results:
+        pages_by_code.setdefault(result["test_code"], []).append(result["page"])
+    return [f"{code} appears {len(on_pages)} times (pages {', '.join(map(str, on_pages))}); all kept"
+            for code, on_pages in pages_by_code.items() if len(on_pages) > 1]
+
+
+def _clean(text: str | None) -> str | None:
+    """Collapse whitespace; empty text becomes None."""
+    if text is None:
+        return None
+    return " ".join(text.split()) or None
+
+
+def _same(field_name: str, a: str, b: str) -> bool:
+    """Equal ignoring case, or (for dates) the same day however it is written."""
+    if field_name in DATE_FIELDS and (day := parse_date(a)) is not None:
+        return day == parse_date(b)
+    return a.casefold() == b.casefold()
+
+
+def _count(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"

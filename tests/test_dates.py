@@ -1,6 +1,6 @@
 import pytest
 
-from app.extract import parse_date
+from app.dates import parse_date
 
 
 @pytest.mark.parametrize("text, expected", [

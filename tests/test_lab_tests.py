@@ -2,8 +2,7 @@ import typing
 
 import pytest
 
-from app import extract
-from app.extract import name_conflict
+from app.lab_tests import LAB_TESTS, TestCode, name_conflict
 
 # Names as Indian lab reports print them; each must be accepted for its code.
 MATCHING = [
@@ -22,6 +21,7 @@ MATCHING = [
     ("CREAT", "Serum Creatinine"), ("CREAT", "Creatinine"),
     ("HB", "Haemoglobin"), ("HB", "Hemoglobin (Hb)"), ("HB", "HGB"),
     ("VITD", "25-Hydroxy Vitamin D"), ("VITD", "Vitamin D Total (25-OH)"), ("VITD", "Vit. D3"),
+    ("VITD", "25(OH)D"), ("VITD", "25-OH Cholecalciferol"),
     ("B12", "Vitamin B12"), ("B12", "Cyanocobalamin"), ("B12", "Vit B 12"),
     ("URIC", "Uric Acid"), ("URIC", "Serum Uric Acid"),
     ("UREA", "Urea"), ("UREA", "Blood Urea"), ("UREA", "Serum Urea"),
@@ -43,7 +43,11 @@ CONFLICTING = [
     ("CREAT", "Creatinine Clearance"), ("CREAT", "Creatine Kinase (CK)"), ("CREAT", "Urine Creatinine"),
     ("CREAT", "BUN/Creatinine Ratio"),
     ("HB", "Glycosylated Haemoglobin (HbA1c)"), ("HBA1C", "Haemoglobin"),
-    ("VITD", "1,25-Dihydroxy Vitamin D"),
+    # every CBC prints these next to haemoglobin
+    ("HB", "Mean Corpuscular Haemoglobin (MCH)"), ("HB", "Mean Corpuscular Hemoglobin Concentration"),
+    ("HB", "MCHC"), ("HB", "Haemoglobin, Urine"),
+    ("VITD", "1,25-Dihydroxy Vitamin D"), ("VITD", "17-Hydroxy Progesterone"), ("VITD", "Vitamin B12"),
+    ("CREAT", "Creatine"),
     ("UREA", "Blood Urea Nitrogen"), ("UREA", "BUN"),
     ("URIC", "Uric Acid, Urine"),
 ]
@@ -65,5 +69,7 @@ def test_conflict_reason_names_the_printed_test():
     )
 
 
-def test_every_test_code_has_a_name_rule():
-    assert set(extract.NAME_RULES) == set(typing.get_args(extract.TestCode))
+def test_catalog_has_the_15_mvp_tests_once_each():
+    codes = [test.code for test in LAB_TESTS]
+    assert len(codes) == len(set(codes)) == 15
+    assert set(typing.get_args(TestCode)) == set(codes)

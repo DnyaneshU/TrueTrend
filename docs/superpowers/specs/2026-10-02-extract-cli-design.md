@@ -15,7 +15,7 @@ Every saved row is `status = needs_check` with `check_notes = 'not verified yet'
 |---|---|
 | Granularity | One Gemma call per page (approach A). The code assigns page numbers, not the model. |
 | Digital pages | PyMuPDF words are regrouped into visual rows: words whose vertical centres are within half a text height form one line, sorted left→right; a horizontal gap wider than 0.6 × the text height becomes ` \| ` (measured: word spaces ≈ 0.2 ×, table column gaps > 3 ×). So a table row reads `HbA1c \| 6.8 \| % \| 4.0 - 5.6`. |
-| Scanned pages | Fewer than 50 visible characters of text, **or** fewer than 200 while images cover at least half the page (a scan with a typed header/footer) → render the page to PNG at 150 DPI → same call with the image (Gemma vision). A text page printed over a full-page letterhead image stays text. Thresholds to be tuned on real reports. |
+| Scanned pages | Fewer than 50 visible characters of text, **or** fewer than 200 while images cover at least half the page (a scan with a typed header/footer) → render the page to PNG at 150 DPI, scaled down so neither side exceeds 2000 px (photo-to-PDF pages can be thousands of points wide) → same call with the image (Gemma vision). A text page printed over a full-page letterhead image stays text. Thresholds to be tuned on real reports. |
 | Ligatures | Word extraction expands typographic ligatures (`ﬁ` → `fi`), so names like "Lipid Profile" match later. |
 | Which tests | Only the 15 MVP tests. The prompt lists them with common alternate names and explicit exclusions: Total T4 (only Free T4), LDL/HDL ratio, VLDL, urine glucose/creatinine, random blood sugar, BUN, and Hb vs HbA1c confusion. Switching to "every test" later is a prompt/schema change. |
 | Test codes | `HBA1C, GLU_F, GLU_PP, TSH, FT4, CHOL, LDL, HDL, TG, CREAT, HB, VITD, B12, URIC, UREA` — an enum in the JSON schema, so Gemma can only answer with these. Saved to `results.test_code` as Gemma's suggestion; normalize.py confirms it on Saturday. |
@@ -92,8 +92,13 @@ requirements.txt   # exact pins: pymupdf, ollama, pydantic, python-dateutil, htt
 pytest.ini         # pythonpath = . so `pytest` finds the app package
 README.md          # setup + the one command
 app/__init__.py
+app/errors.py      # ExtractError: a problem the user can fix
 app/db.py          # schema, connect(), find_report_id(), save_report()
-app/extract.py     # PDF → pages → Gemma → merge → print + save; CLI entry point
+app/pages.py       # PDF -> PageInput per page (rebuilt text, or PNG for scans)
+app/dates.py       # parse_date(): printed date -> ISO, day-first
+app/lab_tests.py   # the 15 MVP tests in one catalog: prompt wording + name rules
+app/gemma.py       # schema, prompt, ask_gemma(): one Ollama call per page
+app/extract.py     # merge pages into one report; CLI entry point (phase 6)
 tests/             # conftest.py (synthetic PDF builder), test_db.py, test_extract_*.py
                    # (pdf, dates, gemma, pipeline, run), test_live_gemma.py (real Gemma,
                    # runs only with AROGYA_LIVE=1)

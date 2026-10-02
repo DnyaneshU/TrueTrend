@@ -1,6 +1,9 @@
 import pytest
 
-from app.extract import ExtractError, PageExtraction, PageInput, extract_pages
+from app.errors import ExtractError
+from app.extract import extract_pages
+from app.gemma import PageExtraction
+from app.pages import PageInput
 
 INVALID = "invalid"
 
@@ -115,6 +118,21 @@ def test_row_whose_name_contradicts_its_code_is_dropped_with_warning():
     assert any("'Estimated Average Glucose' is not GLU_F" in w for w in out.warnings)
     assert any("'Total T4' is not FT4" in w for w in out.warnings)
     assert len(out.replies[0]["reply"]["results"]) == 3  # Gemma's full reply is kept for raw_json
+
+
+def test_row_repeated_on_the_same_page_is_kept_once():
+    # Gemma sometimes lists the same row twice; saving both would double-count it.
+    ask = ScriptedAsk({1: [reply([row(), row(value=" 7.2"), row(value="7.3")])]})
+    out = extract_pages(pages(1), ask)
+    assert [r["value_text"] for r in out.results] == ["7.2", "7.3"]
+    assert any("HBA1C 7.2 was listed twice" in w for w in out.warnings)
+
+
+def test_row_without_a_test_name_is_dropped_with_a_clear_warning():
+    ask = ScriptedAsk({1: [reply([row(name="  "), row()])]})
+    out = extract_pages(pages(1), ask)
+    assert len(out.results) == 1
+    assert "page 1: HBA1C had no test name; row dropped" in out.warnings
 
 
 def test_same_test_on_two_pages_is_kept_twice_with_warning():
