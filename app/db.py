@@ -76,11 +76,11 @@ RESULT_COLUMNS = (
 
 _INSERT_REPORT = (
     f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) "
-    f"VALUES ({', '.join('?' * len(REPORT_COLUMNS))})"
+    f"VALUES ({', '.join(['?'] * len(REPORT_COLUMNS))})"
 )
 _INSERT_RESULT = (
     f"INSERT INTO results (report_id, {', '.join(RESULT_COLUMNS)}) "
-    f"VALUES (?, {', '.join('?' * len(RESULT_COLUMNS))})"
+    f"VALUES (?, {', '.join(['?'] * len(RESULT_COLUMNS))})"
 )
 
 
