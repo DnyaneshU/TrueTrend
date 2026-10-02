@@ -2,6 +2,7 @@
 
 Run with:  AROGYA_LIVE=1 .venv/Scripts/python -m pytest tests/test_live_gemma.py -v
 """
+
 import os
 
 import pymupdf
@@ -18,9 +19,9 @@ pytestmark = pytest.mark.skipif(
 def test_real_gemma_extracts_a_digital_report(make_pdf, report_page, tmp_path):
     out = run(make_pdf([report_page]), db_path=tmp_path / "live.db", originals_dir=tmp_path / "originals")
     # 2 MVP tests found; "Estimated Average Glucose" (a look-alike) left out
-    assert {r["test_code"]: r["value_text"] for r in out["results"]} == {"HBA1C": "7.2", "HB": "12.1"}
-    assert out["sample_date"] == "2026-09-12"
-    assert out["lab_name"] == "SUNRISE DIAGNOSTICS"
+    assert {r.test_code: r.value_text for r in out.results} == {"HBA1C": "7.2", "HB": "12.1"}
+    assert out.sample_date == "2026-09-12"
+    assert out.lab_name == "SUNRISE DIAGNOSTICS"
 
 
 def test_real_gemma_extracts_a_scanned_report(make_pdf, report_page, tmp_path):
@@ -31,5 +32,5 @@ def test_real_gemma_extracts_a_scanned_report(make_pdf, report_page, tmp_path):
         page.insert_image(page.rect, stream=scan_png)
         scan.save(tmp_path / "scan.pdf")
     out = run(tmp_path / "scan.pdf", db_path=tmp_path / "live.db", originals_dir=tmp_path / "originals")
-    assert out["pages"][0]["mode"] == "vision"
-    assert {r["test_code"]: r["value_text"] for r in out["results"]} == {"HBA1C": "7.2", "HB": "12.1"}
+    assert out.pages[0].mode == "vision"
+    assert {r.test_code: r.value_text for r in out.results} == {"HBA1C": "7.2", "HB": "12.1"}

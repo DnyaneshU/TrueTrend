@@ -1,4 +1,5 @@
 """Read the dates printed on lab reports."""
+
 import re
 import warnings
 from datetime import date, datetime

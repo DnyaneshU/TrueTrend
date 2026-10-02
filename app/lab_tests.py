@@ -1,70 +1,99 @@
-"""The 15 MVP lab tests: how Gemma is told about each, and how code checks its answers.
+"""The lab test catalog (data/lab_tests.toml) and the check of Gemma's test codes.
 
 Code checks Gemma's test code against the printed test name because Gemma (vision
 mode especially) sometimes files a look-alike under an MVP code: seen "Estimated
-Average Glucose" as GLU_F and "Total T4" as FT4.
+Average Glucose" as GLU_F, "Total T4" as FT4 and "Hb A 84.4 %" as haemoglobin.
 """
+
 import re
-from dataclasses import dataclass
+import tomllib
+from pathlib import Path
 from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-@dataclass(frozen=True)
-class LabTest:
+from app.config import settings
+
+_DOTTED_ABBREVIATION = re.compile(r"\b(?:[^\W\d_]\.){2,}")  # "t.s.h." but not "s.creatinine"
+_LETTER_DIGIT_BOUNDARY = re.compile(r"(?<=[^\W\d_])(?=\d)|(?<=\d)(?=[^\W\d_])")
+
+
+def normalise_name(text: str) -> str:
+    """Spelling-insensitive form of a test name: 'Vitamin B-12' and 'vitamin b12' -> 'vitamin b 12'."""
+    text = _DOTTED_ABBREVIATION.sub(lambda match: match[0].replace(".", ""), text.casefold())
+    text = re.sub(r"[\W_]+", " ", text)
+    return " ".join(_LETTER_DIGIT_BOUNDARY.sub(" ", text).split())
+
+
+def _contains(name: str, phrase: str) -> bool:
+    """Whole-word phrase match on normalised text."""
+    return f" {phrase} " in f" {name} "
+
+
+class LabTest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     code: str
-    described_as: str          # what the prompt calls it
-    name_must: str             # the printed name must match this (regex, any case)
-    name_must_not: str | None  # ...and must not match this
+    name: str
+    prompt: str
+    names: tuple[str, ...] = Field(min_length=1)
+    not_names: tuple[str, ...] = ()
+
+    @field_validator("names", "not_names")
+    @classmethod
+    def _normalise(cls, phrases: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(normalise_name(phrase) for phrase in phrases)
+
+    def conflict(self, raw_name: str) -> str | None:
+        """Why the printed name can't be this test, or None if it fits."""
+        name = normalise_name(raw_name)
+        if any(_contains(name, p) for p in self.names) and not any(
+            _contains(name, p) for p in self.not_names
+        ):
+            return None
+        return f"'{raw_name}' is not {self.code}"
 
 
-LAB_TESTS = (
-    LabTest("HBA1C", "HbA1c, Glycated / Glycosylated Haemoglobin",
-            r"a1c|glyc", None),
-    LabTest("GLU_F", "Fasting blood or plasma glucose, FBS, Fasting Blood Sugar",
-            r"fasting|\bf(bs|bg|pg)?\b",
-            r"estimated|average|mean|random|\brbs\b|post|prandial|\bpp|urine"),
-    LabTest("GLU_PP", "Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose",
-            r"post|prandial|\bpp|\b(2|two)[\s-]*h(ou)?rs?\b",
-            r"estimated|average|mean|random|\brbs\b|fasting|urine"),
-    LabTest("TSH", "TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)",
-            r"\bt\.?s\.?h\b|thyroid stimulating", r"\bf?t[34]\b"),
-    LabTest("FT4", "Free T4, FT4, Free Thyroxine",
-            r"free|\bft4\b", r"total|\bf?t3\b|\btsh\b"),
-    LabTest("CHOL", "Total Cholesterol",
-            r"cholesterol|\bchol\b|\btc\b", r"hdl|ldl|density|\bnon|ratio"),
-    LabTest("LDL", "LDL Cholesterol (direct or calculated)",
-            r"\bldl|low[\s-]*density", r"vldl|very|hdl|high[\s-]*density|\bnon|ratio"),
-    LabTest("HDL", "HDL Cholesterol",
-            r"\bhdl|high[\s-]*density", r"ldl|low[\s-]*density|\bnon|ratio"),
-    LabTest("TG", "Triglycerides",
-            r"triglyceride|\btg\b|\btrig\b", r"ratio"),
-    LabTest("CREAT", "Serum Creatinine",
-            r"creat", r"urine|clearance|ratio|egfr|\bcreatine\b|kinase|\bc?pk\b|\bck\b"),
-    LabTest("HB", "Haemoglobin / Hemoglobin / Hb",
-            r"h(a)?emoglobin|\bhb\b|\bhgb\b",
-            r"a1c|glyc|corpuscular|\bmchc?\b|urine|\bhb\s*(a\d?|f|s)\b|f(o)?etal|electrophoresis|hplc"),
-    LabTest("VITD", "25-Hydroxy (25-OH) Vitamin D, Vitamin D Total",
-            r"vit(amin)?\.?\s*d[23]?\b|cholecalciferol|25[\s(-]*(oh|hydroxy)", r"1[,\s]*25|dihydroxy"),
-    LabTest("B12", "Vitamin B12, Cyanocobalamin",
-            r"b[\s-]*12|cobalamin", None),
-    LabTest("URIC", "Uric Acid",
-            r"uric", r"urine"),
-    LabTest("UREA", "Urea, Blood Urea, Serum Urea",
-            r"urea", r"nitrogen|\bbun\b|urine"),
-)
+class ReportVocabulary(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
+    flags: tuple[str, ...]
+    empty_words: frozenset[str]
+
+    @field_validator("empty_words")
+    @classmethod
+    def _casefold(cls, words: frozenset[str]) -> frozenset[str]:
+        return frozenset(word.casefold() for word in words)
+
+
+class Catalog(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    tests: tuple[LabTest, ...] = Field(min_length=1)
+    prompt_exclusions: tuple[str, ...]
+    report: ReportVocabulary
+
+    @model_validator(mode="after")
+    def _unique_codes(self) -> "Catalog":
+        codes = [test.code for test in self.tests]
+        if len(codes) != len(set(codes)):
+            raise ValueError(f"duplicate test codes in the catalog: {codes}")
+        return self
+
+    @classmethod
+    def load(cls, path: Path) -> "Catalog":
+        with path.open("rb") as file:
+            return cls.model_validate(tomllib.load(file))
+
+    def test(self, code: str) -> LabTest:
+        return next(test for test in self.tests if test.code == code)
+
+
+CATALOG = Catalog.load(settings.data_dir / "lab_tests.toml")
+LAB_TESTS = CATALOG.tests
 TestCode = Literal[tuple(test.code for test in LAB_TESTS)]
-
-_NAME_PATTERNS = {
-    test.code: (re.compile(test.name_must, re.IGNORECASE),
-                test.name_must_not and re.compile(test.name_must_not, re.IGNORECASE))
-    for test in LAB_TESTS
-}
 
 
 def name_conflict(test_code: str, raw_name: str) -> str | None:
     """Why the printed test name can't be `test_code`, or None if it fits."""
-    must, must_not = _NAME_PATTERNS[test_code]
-    if must.search(raw_name) and not (must_not and must_not.search(raw_name)):
-        return None
-    return f"'{raw_name}' is not {test_code}"
+    return CATALOG.test(test_code).conflict(raw_name)

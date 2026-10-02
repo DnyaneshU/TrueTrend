@@ -1,83 +1,33 @@
-"""SQLite schema and queries.
+"""SQLite storage for reports and their results.
 
-The database and the stored original PDFs live in storage/, which is gitignored:
-real reports and patient data never go into the repo.
+The database and the stored original PDFs live in settings.storage_dir, which is
+gitignored: real reports and patient data never go into the repo.
 """
+
 import sqlite3
+from importlib import resources
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-STORAGE_DIR = ROOT / "storage"
-DB_PATH = STORAGE_DIR / "arogya.db"
-ORIGINALS_DIR = STORAGE_DIR / "originals"
+from app.config import settings
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS patients (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    display_name  TEXT NOT NULL,
-    aliases_json  TEXT NOT NULL DEFAULT '[]',
-    sex           TEXT,
-    birth_year    INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS reports (
-    id                INTEGER PRIMARY KEY AUTOINCREMENT,
-    patient_id        INTEGER REFERENCES patients(id),
-    lab_name          TEXT,
-    sample_date       TEXT,                 -- ISO YYYY-MM-DD, sample collection date
-    report_date       TEXT,                 -- ISO YYYY-MM-DD
-    source            TEXT NOT NULL
-                      CHECK (source IN ('whatsapp', 'gmail', 'upload', 'gmail_import')),
-    file_path         TEXT NOT NULL,
-    sha256            TEXT NOT NULL UNIQUE,
-    is_scanned        INTEGER NOT NULL DEFAULT 0 CHECK (is_scanned IN (0, 1)),
-    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    patient_name_raw  TEXT,                 -- as printed; patient_id is set once matching exists
-    patient_age_raw   TEXT,
-    patient_sex_raw   TEXT,
-    extract_model     TEXT,
-    extract_seconds   REAL,
-    raw_json          TEXT                  -- Gemma's reply for every page
-);
-
-CREATE TABLE IF NOT EXISTS results (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_id       INTEGER NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-    test_code       TEXT,
-    raw_name        TEXT NOT NULL,
-    raw_value_text  TEXT NOT NULL,
-    value           REAL,
-    unit            TEXT,
-    value_std       REAL,
-    unit_std        TEXT,
-    ref_low         REAL,
-    ref_high        REAL,
-    ref_text        TEXT,
-    flag            TEXT,                 -- the lab's high/low mark as printed (H, L, ...)
-    page            INTEGER NOT NULL,
-    bbox_json       TEXT,
-    status          TEXT NOT NULL DEFAULT 'needs_check'
-                    CHECK (status IN ('verified', 'needs_check', 'rejected')),
-    check_notes     TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_results_report ON results(report_id);
-CREATE INDEX IF NOT EXISTS idx_results_test ON results(test_code);
-"""
+SCHEMA = resources.files("app").joinpath("schema.sql").read_text(encoding="utf-8")
 
 REPORT_COLUMNS = (
     "lab_name", "sample_date", "report_date", "source", "file_path", "sha256",
     "is_scanned", "patient_name_raw", "patient_age_raw", "patient_sex_raw",
     "extract_model", "extract_seconds", "raw_json",
-)
+)  # fmt: skip
 RESULT_COLUMNS = (
     "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "flag", "page",
     "status", "check_notes",
-)
+)  # fmt: skip
+
+# Columns added after the first databases were made: (table, column, definition).
+# CREATE TABLE IF NOT EXISTS leaves an older table as it was, so connect() adds them.
+ADDED_COLUMNS = (("results", "flag", "TEXT"),)
 
 _INSERT_REPORT = (
-    f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) "
-    f"VALUES ({', '.join(['?'] * len(REPORT_COLUMNS))})"
+    f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) VALUES ({', '.join(['?'] * len(REPORT_COLUMNS))})"
 )
 _INSERT_RESULT = (
     f"INSERT INTO results (report_id, {', '.join(RESULT_COLUMNS)}) "
@@ -86,27 +36,18 @@ _INSERT_RESULT = (
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
-    """Open the database, creating its folder and tables if needed."""
-    path = Path(path or DB_PATH)
+    """Open the database (settings.db_path by default), creating its folder and tables if needed."""
+    path = Path(path or settings.db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
-    _add_missing_columns(conn)
-    return conn
-
-
-# Columns added after the first databases were made: (table, column, definition).
-_ADDED_COLUMNS = (("results", "flag", "TEXT"),)
-
-
-def _add_missing_columns(conn: sqlite3.Connection) -> None:
-    """CREATE TABLE IF NOT EXISTS leaves an older table as it was; add what it lacks."""
-    for table, column, definition in _ADDED_COLUMNS:
+    for table, column, definition in ADDED_COLUMNS:
         existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    return conn
 
 
 def find_report_id(conn: sqlite3.Connection, sha256: str) -> int | None:

@@ -1,29 +1,27 @@
 """Turn a report PDF into pages Gemma can read: rebuilt text, or an image for scans."""
+
 import statistics
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Literal
 
 import pymupdf
 
+from app.config import settings
 from app.errors import ExtractError
 
-SCAN_TEXT_THRESHOLD = 50          # fewer visible characters than this: the page is a scan
-IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
-IMAGE_PAGE_COVERAGE = 0.5         # of the page (a scan with a typed header or footer)
-RENDER_DPI = 150
-MAX_IMAGE_SIDE = 2000             # pixels; huge photo-to-PDF pages are rendered smaller
-COLUMN_GAP = 0.6                  # a gap wider than this × text height separates table columns
-WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES  # "ﬁ" comes out as "fi"
+# Extract words with ligatures expanded, so "Proﬁle" comes out as "Profile".
+WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES
 
 
 @dataclass(frozen=True)
 class PageInput:
-    number: int                      # 1-based, assigned by code
+    number: int  # 1-based, assigned by code
     total: int
     mode: Literal["text", "vision"]
     text: str = ""
-    image: bytes | None = None       # PNG, vision pages only
+    image: bytes | None = None  # PNG, vision pages only
 
 
 def open_pdf(path: Path) -> pymupdf.Document:
@@ -37,8 +35,10 @@ def open_pdf(path: Path) -> pymupdf.Document:
     if not doc.is_pdf:
         problem = f"Not a PDF: {path}"
     elif doc.needs_pass:
-        problem = (f"{path.name} is password-protected. Open it once, save a copy "
-                   "without a password, and run this on the copy.")
+        problem = (
+            f"{path.name} is password-protected. Open it once, save a copy "
+            "without a password, and run this on the copy."
+        )
     elif doc.page_count == 0:
         problem = f"{path.name} has no pages."
     else:
@@ -60,8 +60,8 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
 
 
 def _render(page: pymupdf.Page) -> bytes:
-    """PNG of the page at RENDER_DPI, scaled down so neither side exceeds MAX_IMAGE_SIDE."""
-    zoom = min(RENDER_DPI / 72, MAX_IMAGE_SIDE / max(page.rect.width, page.rect.height))
+    """PNG of the page at settings.render_dpi, scaled down so neither side exceeds settings.max_image_side."""
+    zoom = min(settings.render_dpi / 72, settings.max_image_side / max(page.rect.width, page.rect.height))
     return page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
 
 
@@ -69,7 +69,7 @@ def page_text(page: pymupdf.Page) -> str:
     """The page's text rebuilt one printed line at a time.
 
     Words whose vertical centres are within half a text height form one line,
-    read left to right. A gap wider than COLUMN_GAP × text height becomes " | ",
+    read left to right. A gap wider than settings.column_gap × text height becomes " | ",
     so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
     words = [word[:5] for word in page.get_text("words", flags=WORD_FLAGS)]  # (x0, y0, x1, y1, text)
@@ -95,8 +95,8 @@ def _centre(word: tuple) -> float:
 def _join_line(words: list[tuple], height: float) -> str:
     """One line's words, left to right, with " | " wherever the gap is a column break."""
     parts = [words[0][4]]
-    for (_, _, previous_x1, _, _), (x0, _, _, _, text) in zip(words, words[1:]):
-        parts.append(" | " if x0 - previous_x1 > COLUMN_GAP * height else " ")
+    for (_, _, previous_x1, _, _), (x0, _, _, _, text) in pairwise(words):
+        parts.append(" | " if x0 - previous_x1 > settings.column_gap * height else " ")
         parts.append(text)
     return "".join(parts)
 
@@ -104,9 +104,11 @@ def _join_line(words: list[tuple], height: float) -> str:
 def _looks_scanned(page: pymupdf.Page, text: str) -> bool:
     """True when the page's content is in an image rather than in its text."""
     visible = len("".join(text.split()))
-    if visible < SCAN_TEXT_THRESHOLD:
+    if visible < settings.scan_text_threshold:
         return True
-    return visible < IMAGE_PAGE_TEXT_THRESHOLD and _image_coverage(page) >= IMAGE_PAGE_COVERAGE
+    return (
+        visible < settings.image_page_text_threshold and _image_coverage(page) >= settings.image_page_coverage
+    )
 
 
 def _image_coverage(page: pymupdf.Page) -> float:

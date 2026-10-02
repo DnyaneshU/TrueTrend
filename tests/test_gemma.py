@@ -17,7 +17,9 @@ VALID_REPLY = (
     '"sample_date":"12/09/2026 08:10","report_date":null,"results":[{"test_code":"HBA1C",'
     '"raw_name":"Glycosylated Haemoglobin (HbA1c)","value_text":"7.2","unit":"%","ref_text":"4.0 - 5.6"}]}'
 )
-TEXT_PAGE = PageInput(number=1, total=2, mode="text", text="Glycosylated Haemoglobin (HbA1c) | 7.2 | % | 4.0 - 5.6")
+TEXT_PAGE = PageInput(
+    number=1, total=2, mode="text", text="Glycosylated Haemoglobin (HbA1c) | 7.2 | % | 4.0 - 5.6"
+)
 VISION_PAGE = PageInput(number=2, total=2, mode="vision", image=b"\x89PNG fake")
 
 
@@ -40,6 +42,7 @@ def fake_chat(monkeypatch):
         fake = FakeChat(**kwargs)
         monkeypatch.setattr(gemma.ollama, "chat", fake)
         return fake
+
     return install
 
 
@@ -107,12 +110,15 @@ def test_unknown_test_code_raises_validation_error(fake_chat):
         ask_gemma(TEXT_PAGE, "gemma4:e4b")
 
 
-@pytest.mark.parametrize("error, message", [
-    (ConnectionError("refused"), "Can't reach Ollama"),
-    (ollama.ResponseError("model 'gemma4:e4b' not found", 404), "Run: ollama pull gemma4:e4b"),
-    (ollama.ResponseError("out of memory", 500), "Ollama error: out of memory"),
-    (httpx.ReadError("connection reset"), "Lost the connection to Ollama"),
-])
+@pytest.mark.parametrize(
+    "error, message",
+    [
+        (ConnectionError("refused"), "Can't reach Ollama"),
+        (ollama.ResponseError("model 'gemma4:e4b' not found", 404), "Run: ollama pull gemma4:e4b"),
+        (ollama.ResponseError("out of memory", 500), "Ollama error: out of memory"),
+        (httpx.ReadError("connection reset"), "Lost the connection to Ollama"),
+    ],
+)
 def test_ollama_problems_become_clear_errors(fake_chat, error, message):
     fake_chat(error=error)
     with pytest.raises(ExtractError, match=message):
@@ -122,7 +128,13 @@ def test_ollama_problems_become_clear_errors(fake_chat, error, message):
 def test_schema_requires_every_field_and_limits_test_codes():
     schema = PageExtraction.model_json_schema()
     assert set(schema["required"]) == {
-        "patient_name", "age", "sex", "lab_name", "sample_date", "report_date", "results",
+        "patient_name",
+        "age",
+        "sex",
+        "lab_name",
+        "sample_date",
+        "report_date",
+        "results",
     }
     codes = set(typing.get_args(lab_tests.TestCode))
     assert len(codes) == 15
