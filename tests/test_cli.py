@@ -113,6 +113,59 @@ def test_run_saves_report_and_returns_output(storage, gemma, make_pdf, report_pa
     assert (storage / "originals" / f"{out.sha256}.pdf").read_bytes() == pdf.read_bytes()
 
 
+def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page):
+    reply = {
+        **GOOD_REPLY,
+        "results": [
+            {
+                "test_code": "VITD",
+                "raw_name": "Vitamin D, 25 Hydroxy",
+                "value_text": "150.00",
+                "unit": "nmol/L",
+                "ref_text": "75.00 - 250.00",
+            },
+            {
+                "test_code": "B12",
+                "raw_name": "Vitamin B12",
+                "value_text": "L < 148",
+                "unit": "pg/mL",
+                "ref_text": "187 - 833",
+            },
+            {
+                "test_code": "HBA1C",
+                "raw_name": "HbA1c",
+                "value_text": "7.2",
+                "unit": "mg",
+                "ref_text": "4.0 - 5.6",
+            },
+        ],
+    }
+    use_gemma(FakeGemma(first=reply))
+    out = run(make_pdf([report_page]))
+    vitd, b12, hba1c = out.results
+    assert (vitd.value, vitd.value_std, vitd.unit_std) == (150.0, 60.0962, "ng/mL")
+    assert (vitd.ref_low, vitd.ref_high) == (30.0481, 100.16)
+    assert (b12.flag, b12.qualifier, b12.value_std) == ("L", "<", 148.0)
+    assert (hba1c.value_std, hba1c.notes) == (None, ["unit 'mg' is not a known unit for HBA1C"])
+    assert query(
+        "SELECT test_code, value, qualifier, value_std, unit_std, ref_low, ref_high, check_notes "
+        "FROM results ORDER BY id"
+    ) == [
+        ("VITD", 150.0, None, 60.0962, "ng/mL", 30.0481, 100.16, "not verified yet"),
+        ("B12", 148.0, "<", 148.0, "pg/mL", 187.0, 833.0, "not verified yet"),
+        (
+            "HBA1C",
+            7.2,
+            None,
+            None,
+            None,
+            None,
+            None,
+            "not verified yet; unit 'mg' is not a known unit for HBA1C",
+        ),
+    ]
+
+
 def test_same_file_twice_is_skipped_without_calling_gemma(storage, gemma, make_pdf, report_page, caplog):
     caplog.set_level("INFO", logger="app")
     pdf = make_pdf([report_page])

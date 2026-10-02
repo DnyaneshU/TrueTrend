@@ -24,6 +24,7 @@ from app.dates import parse_date
 from app.errors import ExtractError
 from app.gemma import ask_gemma, transcribe
 from app.models import Extraction, ReportOutput, SavedResult
+from app.normalize import normalize
 from app.pages import open_pdf, read_pages
 from app.pipeline import DATE_FIELDS, extract_pages, plural
 
@@ -88,9 +89,16 @@ def run(
                 {"pages": [reply.model_dump(mode="json") for reply in extraction.replies]}, ensure_ascii=False
             ),
         }
-        results = [SavedResult(**result.model_dump()) for result in extraction.results]
+        results = [
+            SavedResult(**result.model_dump(), **normalize(result).model_dump())
+            for result in extraction.results
+        ]
         rows = [
-            {**result.model_dump(), "raw_value_text": result.value_text, "check_notes": "not verified yet"}
+            {
+                **result.model_dump(),
+                "raw_value_text": result.value_text,
+                "check_notes": "; ".join(["not verified yet", *result.notes]),
+            }
             for result in results
         ]
         report_id = db.save_report(conn, report, rows, replace=force)

@@ -56,7 +56,19 @@ class Extraction(BaseModel):
     replies: list[PageReply] = Field(default_factory=list)
 
 
-class SavedResult(Result):
+class Normalized(BaseModel):
+    """A result as numbers: the printed value, and the value and normal range in the standard unit."""
+
+    value: float | None = None  # the printed number, in the printed unit
+    qualifier: Literal["<", ">", "<=", ">="] | None = None  # "< 148" is below what the lab can measure
+    value_std: float | None = None  # in unit_std; None when the unit is missing or unknown
+    unit_std: str | None = None
+    ref_low: float | None = None  # the lab's normal range, in unit_std
+    ref_high: float | None = None
+    notes: list[str] = Field(default_factory=list)  # why something above could not be filled in
+
+
+class SavedResult(Result, Normalized):
     status: Literal["verified", "needs_check", "rejected"] = "needs_check"
 
 

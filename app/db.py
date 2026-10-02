@@ -19,12 +19,13 @@ REPORT_COLUMNS = (
 )  # fmt: skip
 RESULT_COLUMNS = (
     "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "flag", "page",
+    "value", "qualifier", "value_std", "unit_std", "ref_low", "ref_high",
     "status", "check_notes",
 )  # fmt: skip
 
 # Columns added after the first databases were made: (table, column, definition).
 # CREATE TABLE IF NOT EXISTS leaves an older table as it was, so connect() adds them.
-ADDED_COLUMNS = (("results", "flag", "TEXT"),)
+ADDED_COLUMNS = (("results", "flag", "TEXT"), ("results", "qualifier", "TEXT"))
 
 _INSERT_REPORT = (
     f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) VALUES ({', '.join(['?'] * len(REPORT_COLUMNS))})"

@@ -18,6 +18,7 @@ from app.errors import ExtractError
 from app.gemma import PageExtraction
 from app.lab_tests import CATALOG, name_conflict
 from app.models import Extraction, Header, PageReply, PageSummary, Result
+from app.normalize import split_flag
 from app.pages import PageInput
 
 logger = logging.getLogger(__name__)
@@ -29,10 +30,6 @@ DATE_FIELDS = ("sample_date", "report_date")
 # Not worth a warning when pages differ: labs stamp each section with its own report
 # time, and print the lab as brand, centre or reference lab on different pages.
 QUIET_FIELDS = ("report_date", "lab_name")
-
-_FLAG_WORDS = "|".join(map(re.escape, sorted(CATALOG.report.flags, key=len, reverse=True)))
-_FLAG_FIRST = re.compile(rf"^({_FLAG_WORDS})\s+(.*\d.*)$")  # "H 168.0"
-_FLAG_LAST = re.compile(rf"^(.*\d.*?)\s+({_FLAG_WORDS})$")  # "168.0 H"
 
 
 def extract_pages(pages: list[PageInput], ask: Ask, transcribe: Transcribe) -> Extraction:
@@ -139,7 +136,7 @@ def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[Result], 
             warnings.append(f"page {page_number}: {row.test_code} {value_text} was listed twice; kept once")
             continue
         seen.add((row.test_code, value_text, unit))
-        flag, value_text = _split_flag(value_text)
+        flag, value_text = split_flag(value_text)
         rows.append(
             Result(
                 page=page_number,
@@ -172,15 +169,6 @@ def _clean(text: str | None) -> str | None:
         return None
     cleaned = " ".join(text.replace(" | ", " ").split())
     return None if not cleaned or cleaned.casefold() in CATALOG.report.empty_words else cleaned
-
-
-def _split_flag(value_text: str) -> tuple[str | None, str]:
-    """('H', '168.0') from 'H 168.0' or '168.0 H'; (None, value) when no high/low mark is printed."""
-    if match := _FLAG_FIRST.match(value_text):
-        return match[1], match[2]
-    if match := _FLAG_LAST.match(value_text):
-        return match[2], match[1]
-    return None, value_text
 
 
 def _same(field_name: str, a: str, b: str) -> bool:

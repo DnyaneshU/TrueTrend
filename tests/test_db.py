@@ -4,6 +4,7 @@ from contextlib import closing
 import pytest
 
 from app import db
+from app.normalize import renormalize
 
 
 def make_report(sha256="abc123", **overrides):
@@ -24,6 +25,7 @@ def make_result(**overrides):
         "page": 1,
         "status": "needs_check",
         "check_notes": "not verified yet",
+        **dict.fromkeys(["value", "qualifier", "value_std", "unit_std", "ref_low", "ref_high"]),
     }
     result.update(overrides)
     return result
@@ -103,12 +105,54 @@ def test_unknown_source_rejected(conn):
 def test_connect_adds_columns_missing_from_an_older_database(tmp_path):
     path = tmp_path / "old.db"
     old = sqlite3.connect(path)
-    old.executescript(db.SCHEMA.replace("    flag            TEXT,", ""))  # a database made before `flag`
+    older_schema = db.SCHEMA
+    for column in ("    flag            TEXT,", "    qualifier       TEXT,"):
+        older_schema = older_schema.replace(column, "")
+    old.executescript(older_schema)  # a database made before `flag` and `qualifier`
     old.close()
     with closing(db.connect(path)) as conn:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
-        assert "flag" in columns
+        assert {"flag", "qualifier"} <= columns
         db.save_report(conn, make_report(), [make_result(flag="H")])
+
+
+def test_renormalize_recomputes_every_saved_result(conn):
+    db.save_report(
+        conn,
+        make_report(),
+        [
+            make_result(
+                test_code="VITD",
+                raw_name="Vitamin D",
+                raw_value_text="150",
+                unit="nmol/L",
+                ref_text="75 - 250",
+            )
+        ],
+    )
+    assert renormalize(conn) == 1
+    row = conn.execute("SELECT value, value_std, unit_std, ref_low, ref_high FROM results").fetchone()
+    assert tuple(row) == (150.0, 60.0962, "ng/mL", 30.0481, 100.16)
+
+
+def test_renormalize_splits_a_flag_saved_inside_the_value(conn):
+    # rows saved before flags were split out have "H 168.0" as their value text
+    db.save_report(
+        conn,
+        make_report(),
+        [
+            make_result(
+                test_code="TG",
+                raw_name="Triglyceride",
+                raw_value_text="H 168.0",
+                unit="mg/dL",
+                ref_text="<150",
+            )
+        ],
+    )
+    renormalize(conn)
+    row = conn.execute("SELECT raw_value_text, flag, value, value_std, ref_high FROM results").fetchone()
+    assert tuple(row) == ("168.0", "H", 168.0, 168.0, 150.0)
 
 
 def test_is_scanned_must_be_0_or_1(conn):
