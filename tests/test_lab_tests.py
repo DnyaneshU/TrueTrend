@@ -49,6 +49,9 @@ CONFLICTING = [
     # every CBC prints these next to haemoglobin
     ("HB", "Mean Corpuscular Haemoglobin (MCH)"), ("HB", "Mean Corpuscular Hemoglobin Concentration"),
     ("HB", "MCHC"), ("HB", "Haemoglobin, Urine"),
+    # fractions from haemoglobin electrophoresis (seen on a real report: "Hb A 84.4 %")
+    ("HB", "Hb A"), ("HB", "HbA2"), ("HB", "Hb A2"), ("HB", "Foetal Hb"), ("HB", "Hb F"),
+    ("HB", "HB Electrophoresis By HPLC"),
     ("VITD", "1,25-Dihydroxy Vitamin D"), ("VITD", "17-Hydroxy Progesterone"), ("VITD", "Vitamin B12"),
     ("CREAT", "Creatine"),
     ("UREA", "Blood Urea Nitrogen"), ("UREA", "BUN"),

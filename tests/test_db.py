@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -15,7 +16,8 @@ def make_report(sha256="abc123", **overrides):
 def make_result(**overrides):
     result = {
         "test_code": "HBA1C", "raw_name": "HbA1c", "raw_value_text": "7.2", "unit": "%",
-        "ref_text": "4.0 - 5.6", "page": 1, "status": "needs_check", "check_notes": "not verified yet",
+        "ref_text": "4.0 - 5.6", "flag": None, "page": 1, "status": "needs_check",
+        "check_notes": "not verified yet",
     }
     result.update(overrides)
     return result
@@ -85,6 +87,17 @@ def test_failed_replace_keeps_old_report(conn):
 def test_unknown_source_rejected(conn):
     with pytest.raises(sqlite3.IntegrityError):
         db.save_report(conn, make_report(source="fax"), [])
+
+
+def test_connect_adds_columns_missing_from_an_older_database(tmp_path):
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript(db.SCHEMA.replace("    flag            TEXT,", ""))  # a database made before `flag`
+    old.close()
+    with closing(db.connect(path)) as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
+        assert "flag" in columns
+        db.save_report(conn, make_report(), [make_result(flag="H")])
 
 
 def test_is_scanned_must_be_0_or_1(conn):

@@ -66,6 +66,14 @@ def test_conflicting_header_keeps_first_and_warns():
     assert "page 2" in out.warnings[0] and "Mr. Anil Patil" in out.warnings[0]
 
 
+def test_sections_reported_at_different_times_are_not_a_conflict():
+    # Labs stamp each section with its own report time; only the first is kept, silently.
+    ask = ScriptedAsk({1: [reply(report_date="28-Feb-2023 10:26")], 2: [reply(report_date="20-Feb-2023 11:45")]})
+    out = extract_pages(pages(2), ask, no_transcribe)
+    assert out.header["report_date"] == "28-Feb-2023 10:26"
+    assert out.warnings == []
+
+
 def test_same_header_in_other_case_or_date_format_is_not_a_conflict():
     ask = ScriptedAsk({
         1: [reply(patient_name="Mrs. Sunita Patil", sample_date="12/09/2026 08:10")],
@@ -104,7 +112,7 @@ def test_text_is_cleaned_and_rows_without_value_dropped():
     out = extract_pages(pages(1), ask, no_transcribe)
     assert out.results == [{
         "page": 1, "test_code": "HBA1C", "raw_name": "Glycosylated Haemoglobin (HbA1c)",
-        "value_text": "7.2", "unit": None, "ref_text": "4.0 - 5.6",
+        "value_text": "7.2", "flag": None, "unit": None, "ref_text": "4.0 - 5.6",
     }]
     assert any("HB" in w and "no value" in w for w in out.warnings)
 
@@ -122,6 +130,22 @@ def test_row_whose_name_contradicts_its_code_is_dropped_with_warning():
     assert any("'Estimated Average Glucose' is not GLU_F" in w for w in out.warnings)
     assert any("'Total T4' is not FT4" in w for w in out.warnings)
     assert len(out.replies[0]["reply"]["results"]) == 3  # Gemma's full reply is kept for raw_json
+
+
+@pytest.mark.parametrize("printed, flag, value", [
+    ("H 168.0", "H", "168.0"), ("L 18.0", "L", "18.0"), ("L < 148", "L", "< 148"),
+    ("141.0 H", "H", "141.0"), ("7.2", None, "7.2"), ("< 0.5", None, "< 0.5"),
+    ("Low", None, "Low"),  # a word result, not a flag
+])
+def test_high_low_flag_is_split_from_the_value(printed, flag, value):
+    out = extract_pages(pages(1), ScriptedAsk({1: [reply([row(value=printed)])]}), no_transcribe)
+    assert (out.results[0]["flag"], out.results[0]["value_text"]) == (flag, value)
+
+
+def test_column_markers_do_not_leak_into_saved_text():
+    ask = ScriptedAsk({1: [reply([row(ref="Deficiency | : <10 | Insufficiency : 10 - 30")])]})
+    out = extract_pages(pages(1), ask, no_transcribe)
+    assert out.results[0]["ref_text"] == "Deficiency : <10 Insufficiency : 10 - 30"
 
 
 def test_row_repeated_on_the_same_page_is_kept_once():

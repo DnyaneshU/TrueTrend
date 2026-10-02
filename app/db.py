@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS results (
     ref_low         REAL,
     ref_high        REAL,
     ref_text        TEXT,
+    flag            TEXT,                 -- the lab's high/low mark as printed (H, L, ...)
     page            INTEGER NOT NULL,
     bbox_json       TEXT,
     status          TEXT NOT NULL DEFAULT 'needs_check'
@@ -70,7 +71,7 @@ REPORT_COLUMNS = (
     "extract_model", "extract_seconds", "raw_json",
 )
 RESULT_COLUMNS = (
-    "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "page",
+    "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "flag", "page",
     "status", "check_notes",
 )
 
@@ -92,7 +93,20 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    _add_missing_columns(conn)
     return conn
+
+
+# Columns added after the first databases were made: (table, column, definition).
+_ADDED_COLUMNS = (("results", "flag", "TEXT"),)
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """CREATE TABLE IF NOT EXISTS leaves an older table as it was; add what it lacks."""
+    for table, column, definition in _ADDED_COLUMNS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def find_report_id(conn: sqlite3.Connection, sha256: str) -> int | None:
