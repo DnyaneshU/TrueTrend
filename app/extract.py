@@ -7,6 +7,7 @@ pages with almost no text (scans) are sent as an image. Gemma copies values
 exactly as printed; code assigns page numbers, parses dates and saves the rows.
 Every saved row is `needs_check` until verify.py exists.
 """
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -22,7 +23,7 @@ class ExtractError(Exception):
     """A problem the user can fix. main() prints it as one line and exits with 1."""
 
 
-@dataclass
+@dataclass(frozen=True)
 class PageInput:
     number: int                      # 1-based, assigned by code
     total: int
@@ -32,6 +33,7 @@ class PageInput:
 
 
 def open_pdf(path: Path) -> pymupdf.Document:
+    """Open a report PDF, or raise ExtractError saying in one sentence why not."""
     if not path.is_file():
         raise ExtractError(f"File not found: {path}")
     try:
@@ -39,18 +41,16 @@ def open_pdf(path: Path) -> pymupdf.Document:
     except RuntimeError:  # pymupdf.FileDataError and friends
         raise ExtractError(f"Not a readable PDF: {path}") from None
     if not doc.is_pdf:
-        doc.close()
-        raise ExtractError(f"Not a PDF: {path}")
-    if doc.needs_pass:
-        doc.close()
-        raise ExtractError(
-            f"{path.name} is password-protected. Open it once, save a copy "
-            "without a password, and run this on the copy."
-        )
-    if doc.page_count == 0:
-        doc.close()
-        raise ExtractError(f"{path.name} has no pages.")
-    return doc
+        problem = f"Not a PDF: {path}"
+    elif doc.needs_pass:
+        problem = (f"{path.name} is password-protected. Open it once, save a copy "
+                   "without a password, and run this on the copy.")
+    elif doc.page_count == 0:
+        problem = f"{path.name} has no pages."
+    else:
+        return doc
+    doc.close()
+    raise ExtractError(problem)
 
 
 def page_text(page: pymupdf.Page) -> str:
@@ -60,37 +60,43 @@ def page_text(page: pymupdf.Page) -> str:
     read left to right. A gap wider than COLUMN_GAP × text height becomes " | ",
     so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
-    words = page.get_text("words")  # (x0, y0, x1, y1, word, block_no, line_no, word_no)
+    words = [word[:5] for word in page.get_text("words")]  # (x0, y0, x1, y1, text)
     if not words:
         return ""
-    heights = sorted(w[3] - w[1] for w in words)
-    height = heights[len(heights) // 2] or 1.0
-    lines: list[tuple[float, list]] = []
+    height = statistics.median(y1 - y0 for _, y0, _, y1, _ in words) or 1.0
+    lines: list[list[tuple]] = []
+    line_centre = 0.0
     for word in sorted(words, key=lambda w: ((w[1] + w[3]) / 2, w[0])):
         centre = (word[1] + word[3]) / 2
-        if lines and centre - lines[-1][0] <= height / 2:
-            lines[-1][1].append(word)
+        if lines and centre - line_centre <= height / 2:
+            lines[-1].append(word)
         else:
-            lines.append((centre, [word]))
-    rendered = []
-    for _, line in lines:
-        line.sort(key=lambda w: w[0])
-        parts = [line[0][4]]
-        for previous, word in zip(line, line[1:]):
-            parts.append(" | " if word[0] - previous[2] > COLUMN_GAP * height else " ")
-            parts.append(word[4])
-        rendered.append("".join(parts))
-    return "\n".join(rendered)
+            lines.append([word])
+            line_centre = centre
+    return "\n".join(_join_line(sorted(line), height) for line in lines)
+
+
+def _join_line(words: list[tuple], height: float) -> str:
+    """One line's words, left to right, with " | " wherever the gap is a column break."""
+    parts = [words[0][4]]
+    for (_, _, previous_x1, _, _), (x0, _, _, _, text) in zip(words, words[1:]):
+        parts.append(" | " if x0 - previous_x1 > COLUMN_GAP * height else " ")
+        parts.append(text)
+    return "".join(parts)
 
 
 def read_pages(doc: pymupdf.Document) -> list[PageInput]:
+    """One PageInput per page: its rebuilt text, or a PNG of the page if it looks scanned."""
     pages = []
-    for index, page in enumerate(doc):
-        number, total = index + 1, doc.page_count
+    for number, page in enumerate(doc, start=1):
         text = page_text(page)
-        if len("".join(text.split())) >= SCAN_TEXT_THRESHOLD:
-            pages.append(PageInput(number, total, "text", text=text))
-        else:
+        if _looks_scanned(text):
             png = page.get_pixmap(dpi=RENDER_DPI).tobytes("png")
-            pages.append(PageInput(number, total, "vision", image=png))
+            pages.append(PageInput(number, doc.page_count, "vision", image=png))
+        else:
+            pages.append(PageInput(number, doc.page_count, "text", text=text))
     return pages
+
+
+def _looks_scanned(text: str) -> bool:
+    return len("".join(text.split())) < SCAN_TEXT_THRESHOLD

@@ -74,8 +74,17 @@ RESULT_COLUMNS = (
     "status", "check_notes",
 )
 
+_INSERT_REPORT = (
+    f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) "
+    f"VALUES ({', '.join('?' * len(REPORT_COLUMNS))})"
+)
+_INSERT_RESULT = (
+    f"INSERT INTO results (report_id, {', '.join(RESULT_COLUMNS)}) "
+    f"VALUES (?, {', '.join('?' * len(RESULT_COLUMNS))})"
+)
 
-def connect(path: Path | None = None) -> sqlite3.Connection:
+
+def connect(path: str | Path | None = None) -> sqlite3.Connection:
     """Open the database, creating its folder and tables if needed."""
     path = Path(path or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,15 +111,9 @@ def save_report(conn: sqlite3.Connection, report: dict, results: list[dict], rep
     with conn:
         if replace:
             conn.execute("DELETE FROM reports WHERE sha256 = ?", (report["sha256"],))
-        cursor = conn.execute(
-            f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) "
-            f"VALUES ({', '.join('?' * len(REPORT_COLUMNS))})",
-            [report[column] for column in REPORT_COLUMNS],
-        )
-        report_id = cursor.lastrowid
+        report_id = conn.execute(_INSERT_REPORT, [report[column] for column in REPORT_COLUMNS]).lastrowid
         conn.executemany(
-            f"INSERT INTO results (report_id, {', '.join(RESULT_COLUMNS)}) "
-            f"VALUES (?, {', '.join('?' * len(RESULT_COLUMNS))})",
+            _INSERT_RESULT,
             [[report_id, *(result[column] for column in RESULT_COLUMNS)] for result in results],
         )
     return report_id
