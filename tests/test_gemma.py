@@ -6,8 +6,10 @@ import ollama
 import pytest
 from pydantic import ValidationError
 
-from app import extract
-from app.extract import ExtractError, PageExtraction, PageInput, ask_gemma
+from app import gemma, lab_tests
+from app.errors import ExtractError
+from app.gemma import PageExtraction, ask_gemma
+from app.pages import PageInput
 
 VALID_REPLY = (
     '{"patient_name":"Mrs. Sunita Patil","age":"62","sex":"F","lab_name":"SUNRISE DIAGNOSTICS",'
@@ -35,7 +37,7 @@ class FakeChat:
 def fake_chat(monkeypatch):
     def install(**kwargs):
         fake = FakeChat(**kwargs)
-        monkeypatch.setattr(extract.ollama, "chat", fake)
+        monkeypatch.setattr(gemma.ollama, "chat", fake)
         return fake
     return install
 
@@ -50,7 +52,7 @@ def test_text_page_is_sent_as_text_with_fixed_settings(fake_chat):
     assert call["options"] == {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
     assert call["format"] == PageExtraction.model_json_schema()
     system, user = call["messages"]
-    assert system == {"role": "system", "content": extract.SYSTEM_PROMPT}
+    assert system == {"role": "system", "content": gemma.SYSTEM_PROMPT}
     assert user["content"].startswith("Page 1 of 2.")
     assert "(HbA1c) | 7.2 | %" in user["content"]
     assert "images" not in user
@@ -99,11 +101,11 @@ def test_schema_requires_every_field_and_limits_test_codes():
     assert set(schema["required"]) == {
         "patient_name", "age", "sex", "lab_name", "sample_date", "report_date", "results",
     }
-    codes = set(typing.get_args(extract.TestCode))
+    codes = set(typing.get_args(lab_tests.TestCode))
     assert len(codes) == 15
     assert set(schema["$defs"]["ExtractedResult"]["properties"]["test_code"]["enum"]) == codes
 
 
 def test_prompt_describes_every_test_code():
-    for code in typing.get_args(extract.TestCode):
-        assert f"\n  {code} " in extract.SYSTEM_PROMPT
+    for code in typing.get_args(lab_tests.TestCode):
+        assert f"\n  {code} " in gemma.SYSTEM_PROMPT

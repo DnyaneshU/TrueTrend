@@ -92,8 +92,13 @@ requirements.txt   # exact pins: pymupdf, ollama, pydantic, python-dateutil, htt
 pytest.ini         # pythonpath = . so `pytest` finds the app package
 README.md          # setup + the one command
 app/__init__.py
+app/errors.py      # ExtractError: a problem the user can fix
 app/db.py          # schema, connect(), find_report_id(), save_report()
-app/extract.py     # PDF → pages → Gemma → merge → print + save; CLI entry point
+app/pages.py       # PDF -> PageInput per page (rebuilt text, or PNG for scans)
+app/dates.py       # parse_date(): printed date -> ISO, day-first
+app/lab_tests.py   # the 15 MVP tests in one catalog: prompt wording + name rules
+app/gemma.py       # schema, prompt, ask_gemma(): one Ollama call per page
+app/extract.py     # merge pages into one report; CLI entry point (phase 6)
 tests/             # conftest.py (synthetic PDF builder), test_db.py, test_extract_*.py
                    # (pdf, dates, gemma, pipeline, run), test_live_gemma.py (real Gemma,
                    # runs only with AROGYA_LIVE=1)

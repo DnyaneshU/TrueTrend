@@ -1,7 +1,8 @@
 import pymupdf
 import pytest
 
-from app.extract import ExtractError, open_pdf, page_text, read_pages
+from app.errors import ExtractError
+from app.pages import open_pdf, page_text, read_pages
 
 
 def test_page_text_rebuilds_table_rows(make_pdf, report_page):

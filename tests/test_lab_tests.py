@@ -2,8 +2,7 @@ import typing
 
 import pytest
 
-from app import extract
-from app.extract import name_conflict
+from app.lab_tests import LAB_TESTS, TestCode, name_conflict
 
 # Names as Indian lab reports print them; each must be accepted for its code.
 MATCHING = [
@@ -65,5 +64,7 @@ def test_conflict_reason_names_the_printed_test():
     )
 
 
-def test_every_test_code_has_a_name_rule():
-    assert set(extract.NAME_RULES) == set(typing.get_args(extract.TestCode))
+def test_catalog_has_the_15_mvp_tests_once_each():
+    codes = [test.code for test in LAB_TESTS]
+    assert len(codes) == len(set(codes)) == 15
+    assert set(typing.get_args(TestCode)) == set(codes)
