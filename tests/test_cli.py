@@ -85,9 +85,9 @@ def test_run_saves_report_and_returns_output(storage, gemma, make_pdf, report_pa
     assert report[2].endswith(f"{out['sha256']}.pdf")
     assert report[3:6] == (0, "Mrs. Sunita Patil", "gemma4:e4b")
     assert json.loads(report[6])["pages"][0]["reply"]["results"][0]["value_text"] == "7.2"
-    assert query("SELECT test_code, raw_value_text, page, status, check_notes FROM results ORDER BY id") == [
-        ("HBA1C", "7.2", 1, "needs_check", "not verified yet"),
-        ("HB", "12.1", 1, "needs_check", "not verified yet"),
+    assert query("SELECT test_code, raw_value_text, flag, page, status, check_notes FROM results ORDER BY id") == [
+        ("HBA1C", "7.2", None, 1, "needs_check", "not verified yet"),
+        ("HB", "12.1", None, 1, "needs_check", "not verified yet"),
     ]
     assert (storage / "originals" / f"{out['sha256']}.pdf").read_bytes() == pdf.read_bytes()
 

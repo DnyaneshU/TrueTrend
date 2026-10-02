@@ -132,6 +132,7 @@ def test_schema_requires_every_field_and_limits_test_codes():
 def test_prompt_excludes_the_cbc_look_alikes_of_haemoglobin():
     exclusions = gemma.SYSTEM_PROMPT.split("Do NOT include:")[1].split("\n")[0]
     assert "MCH" in exclusions and "MCHC" in exclusions
+    assert "Hb A" in exclusions and "HbF" in exclusions
 
 
 def test_prompt_describes_every_test_code():

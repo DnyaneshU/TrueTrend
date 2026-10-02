@@ -10,6 +10,7 @@ with a warning. Every saved row is `needs_check` until verify.py exists.
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 import time
@@ -30,6 +31,11 @@ from app.pages import PageInput, open_pdf, read_pages
 
 HEADER_FIELDS = ("patient_name", "age", "sex", "lab_name", "sample_date", "report_date")
 DATE_FIELDS = ("sample_date", "report_date")
+QUIET_FIELDS = ("report_date",)   # labs stamp each section with its own report time
+
+# The lab's high/low mark printed in the value's cell, before or after it: "H 168.0", "7.2 L".
+_FLAG_FIRST = re.compile(r"^(HH|LL|H|L)\s+(.*\d.*)$")
+_FLAG_LAST = re.compile(r"^(.*\d.*?)\s+(HH|LL|H|L)$")
 
 Ask = Callable[[PageInput, bool], PageExtraction]  # (page, retry) -> reply
 Transcribe = Callable[[PageInput], str]            # scanned page -> its text
@@ -103,7 +109,7 @@ def _merge_header(header: dict, header_page: dict, reply: PageExtraction, page_n
             continue
         if header[name] is None:
             header[name], header_page[name] = value, page_number
-        elif not _same(name, header[name], value):
+        elif name not in QUIET_FIELDS and not _same(name, header[name], value):
             first = header_page[name]
             warnings.append(f"page {page_number}: {name} '{value}' differs from page {first} "
                             f"('{header[name]}'); kept page {first}")
@@ -128,11 +134,13 @@ def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[dict], li
             warnings.append(f"page {page_number}: {row.test_code} {value_text} was listed twice; kept once")
             continue
         seen.add((row.test_code, value_text, unit))
+        flag, value_text = _split_flag(value_text)
         rows.append({
             "page": page_number,
             "test_code": row.test_code,
             "raw_name": raw_name,
             "value_text": value_text,
+            "flag": flag,
             "unit": unit,
             "ref_text": _clean(row.ref_text),
         })
@@ -149,10 +157,19 @@ def _repeat_warnings(results: list[dict]) -> list[str]:
 
 
 def _clean(text: str | None) -> str | None:
-    """Collapse whitespace; empty text becomes None."""
+    """Collapse whitespace and drop the " | " column markers page_text added; empty becomes None."""
     if text is None:
         return None
-    return " ".join(text.split()) or None
+    return " ".join(text.replace(" | ", " ").split()) or None
+
+
+def _split_flag(value_text: str) -> tuple[str | None, str]:
+    """('H', '168.0') from 'H 168.0' or '168.0 H'; (None, value) when no high/low mark is printed."""
+    if match := _FLAG_FIRST.match(value_text):
+        return match[1], match[2]
+    if match := _FLAG_LAST.match(value_text):
+        return match[2], match[1]
+    return None, value_text
 
 
 def _same(field_name: str, a: str, b: str) -> bool:
@@ -211,7 +228,7 @@ def run(pdf_path: Path, *, model: str = DEFAULT_MODEL, force: bool = False,
         }
         rows = [{
             "test_code": r["test_code"], "raw_name": r["raw_name"], "raw_value_text": r["value_text"],
-            "unit": r["unit"], "ref_text": r["ref_text"], "page": r["page"],
+            "unit": r["unit"], "ref_text": r["ref_text"], "flag": r["flag"], "page": r["page"],
             "status": "needs_check", "check_notes": "not verified yet",
         } for r in extraction.results]
         report_id = db.save_report(conn, report, rows, replace=force)
