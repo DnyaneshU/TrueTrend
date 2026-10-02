@@ -1,0 +1,94 @@
+# Extract CLI — design (Friday checkpoint)
+
+**Goal:** `python -m app.extract path/to/report.pdf` reads a lab report PDF, asks local
+Gemma (`gemma4:e4b` via Ollama) for the MVP test rows, prints them as JSON and saves them
+to SQLite. Stop there so the builder can test it on real reports.
+
+**In scope today:** repo skeleton, `requirements.txt`, `.gitignore`, short `README.md`,
+SQLite schema (`app/db.py`), `app/extract.py`, quick tests.
+**Not today:** normalize, verify, RCV, web UI, patient matching (all Saturday or later).
+Every saved row is `status = needs_check` with `check_notes = 'not verified yet'`.
+
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Granularity | One Gemma call per page (approach A). The code assigns page numbers, not the model. |
+| Digital pages | PyMuPDF words are regrouped into visual rows: words whose vertical centres are close form one line, sorted left→right; a horizontal gap wider than the text height becomes ` \| `. So a table row reads `HbA1c \| 6.8 \| % \| 4.0 - 5.6`. |
+| Scanned pages | Fewer than 50 non-whitespace characters of text → render the page to PNG at 150 DPI → same call with the image (Gemma vision). Threshold to be tuned on real reports. |
+| Which tests | Only the 15 MVP tests. The prompt lists them with common alternate names and explicit exclusions: Total T4 (only Free T4), LDL/HDL ratio, VLDL, urine glucose/creatinine, random blood sugar, BUN, and Hb vs HbA1c confusion. Switching to "every test" later is a prompt/schema change. |
+| Test codes | `HBA1C, GLU_F, GLU_PP, TSH, FT4, CHOL, LDL, HDL, TG, CREAT, HB, VITD, B12, URIC, UREA` — an enum in the JSON schema, so Gemma can only answer with these. Saved to `results.test_code` as Gemma's suggestion; normalize.py confirms it on Saturday. |
+| Copy, don't compute | Gemma returns name, value, unit, reference range and dates **exactly as printed**. No numeric parsing today (`value`, `ref_low`, … stay NULL for normalize.py). |
+| Dates | Code parses the printed text day-first (DD/MM) with `python-dateutil` into ISO `YYYY-MM-DD`. Partial or unparseable dates → NULL + warning. `sample_date` = collection date. |
+| Ollama call | Official `ollama` package. `format` = JSON schema from a Pydantic model; reply validated with the same model. Options: `think=False`, `temperature=0`, `num_ctx=8192`, `num_predict=2048`. |
+| Merging pages | Header fields (patient name/age/sex, lab, dates): first non-null value in page order; a later page with a different non-null value adds a warning. Results: concatenated in page order. |
+
+**Per-page JSON schema (Pydantic):**
+`{patient_name, age, sex, lab_name, sample_date, report_date: str|null,
+results: [{test_code: enum, raw_name: str, value_text: str, unit: str|null, ref_text: str|null}]}`
+All keys required (nullable where shown), header first so it is generated before results.
+
+## Storage
+
+- Original copied to `storage/originals/<sha256>.pdf`; database at `storage/arogya.db`. Both gitignored.
+- Tables exactly as in CLAUDE.md (`patients`, `reports`, `results`), with CHECK constraints on
+  `source` and `status`, `UNIQUE(reports.sha256)`, `results.report_id → reports.id ON DELETE CASCADE`,
+  foreign keys switched on per connection.
+- Extra columns on `reports`: `patient_name_raw`, `patient_age_raw`, `patient_sex_raw`
+  (`patient_id` stays NULL until matching exists), `extract_model`, `extract_seconds`
+  (latency number for the post), `raw_json` (merged Gemma output, for debugging and eval).
+- `source = 'upload'` for the CLI; `is_scanned = 1` if any page used vision.
+- All Gemma calls finish before any DB write; report + results are inserted in one transaction.
+
+## CLI behaviour
+
+```
+python -m app.extract report.pdf [--force] [--model gemma4:e2b]
+```
+- stdout: the final JSON only (`> out.json` works). stderr: progress, e.g.
+  `page 2/3 · text · 4 results · 21.3 s`, and warnings.
+- Output JSON: `report_id, file, sha256, model, seconds, patient_name, age, sex, lab_name,
+  sample_date, sample_date_text, report_date, report_date_text,
+  pages[{page, mode: text|vision|failed, results, seconds}],
+  warnings[], results[{page, test_code, raw_name, value_text, unit, ref_text, status}]`.
+- Same file again (same sha256) → checked **before** calling Gemma:
+  `already extracted as report #3 — use --force to redo`, exit 0, nothing printed to stdout.
+- `--force` re-extracts; the old report (results cascade) is deleted in the **same transaction**
+  that inserts the new one, so a failed re-run keeps the old data.
+
+## Errors and partial failures
+
+Fatal — one clear sentence on stderr, exit 1, nothing saved:
+- File missing / not a PDF; password-protected PDF (“open it once and save a copy without a password”).
+- Ollama not reachable (“is Ollama running?”), at the start or mid-report; model not pulled
+  (“run: ollama pull <model>”).
+- Every page failed validation.
+
+Non-fatal — warning on stderr and in the JSON, report saved, exit 0:
+- A page whose reply fails schema validation is retried once; if it fails again that page is
+  skipped (`mode: failed`).
+- No MVP tests found on any page (report saved with zero results, so a re-run is skipped
+  unless `--force`).
+- Unparseable date; pages disagreeing on a header field.
+
+## Testing (pytest, no Gemma needed)
+
+- Row rebuilding on a small PDF generated inside the test with PyMuPDF.
+- Date parsing: `14/09/2026`, `02-Oct-2026 10:15 AM`, partial and garbage input.
+- DB: schema creation, save, duplicate detection, `--force` replace with cascade.
+- Pipeline with a fake Gemma function injected: page numbers come from code, header merge and
+  conflict warning, empty page → vision mode, failed page → retry then skip.
+- Real check: the builder runs the CLI on real reports and reads the JSON.
+
+## Files
+
+```
+requirements.txt   # pymupdf, ollama, pydantic, python-dateutil, pytest
+.gitignore         # storage/, *.db, .env, __pycache__/, .venv/
+README.md          # setup + the one command
+app/__init__.py
+app/db.py          # schema, connect(), save/find/delete report
+app/extract.py     # PDF → pages → Gemma → merge → print + save; CLI entry point
+tests/             # test_db.py, test_extract.py
+```
+`web/`, `data/`, `eval/`, `samples/` are created when their part is built.
