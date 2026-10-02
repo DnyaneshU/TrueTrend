@@ -12,6 +12,7 @@ SCAN_TEXT_THRESHOLD = 50          # fewer visible characters than this: the page
 IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
 IMAGE_PAGE_COVERAGE = 0.5         # of the page (a scan with a typed header or footer)
 RENDER_DPI = 150
+MAX_IMAGE_SIDE = 2000             # pixels; huge photo-to-PDF pages are rendered smaller
 COLUMN_GAP = 0.6                  # a gap wider than this × text height separates table columns
 WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES  # "ﬁ" comes out as "fi"
 
@@ -52,11 +53,16 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
     for number, page in enumerate(doc, start=1):
         text = page_text(page)
         if _looks_scanned(page, text):
-            png = page.get_pixmap(dpi=RENDER_DPI).tobytes("png")
-            pages.append(PageInput(number, doc.page_count, "vision", image=png))
+            pages.append(PageInput(number, doc.page_count, "vision", image=_render(page)))
         else:
             pages.append(PageInput(number, doc.page_count, "text", text=text))
     return pages
+
+
+def _render(page: pymupdf.Page) -> bytes:
+    """PNG of the page at RENDER_DPI, scaled down so neither side exceeds MAX_IMAGE_SIDE."""
+    zoom = min(RENDER_DPI / 72, MAX_IMAGE_SIDE / max(page.rect.width, page.rect.height))
+    return page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom)).tobytes("png")
 
 
 def page_text(page: pymupdf.Page) -> str:

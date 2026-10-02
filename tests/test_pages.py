@@ -41,6 +41,23 @@ def test_read_pages_sends_text_pages_as_text_and_blank_pages_as_images(make_pdf,
     assert second.image.startswith(b"\x89PNG")
 
 
+def test_read_pages_caps_the_size_of_huge_scanned_pages():
+    # Photo-to-PDF apps make pages thousands of points wide; 150 DPI would mean ~50 megapixels.
+    with pymupdf.open() as doc:
+        doc.new_page(width=3000, height=4000)
+        (result,) = read_pages(doc)
+    image = pymupdf.Pixmap(result.image)
+    assert max(image.width, image.height) <= 2000
+
+
+def test_read_pages_renders_a4_scans_at_150_dpi():
+    with pymupdf.open() as doc:
+        doc.new_page()  # A4
+        (result,) = read_pages(doc)
+    image = pymupdf.Pixmap(result.image)
+    assert (image.width, image.height) == (1240, 1755)
+
+
 def scan_image():
     """A PNG of printed results, standing in for a scanned page."""
     with pymupdf.open() as src:

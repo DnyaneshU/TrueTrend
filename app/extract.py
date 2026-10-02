@@ -47,15 +47,17 @@ def extract_pages(pages: list[PageInput], ask: Ask) -> Extraction:
         started = time.perf_counter()
         reply = _ask_with_retry(ask, page)
         seconds = round(time.perf_counter() - started, 1)
-        out.replies.append({"page": page.number, "mode": page.mode, "reply": reply and reply.model_dump()})
+        out.replies.append({"page": page.number, "mode": page.mode,
+                            "reply": reply.model_dump() if reply else None})
         if reply is None:
             out.pages.append({"page": page.number, "mode": "failed", "results": 0, "seconds": seconds})
             out.warnings.append(f"page {page.number}: Gemma's answer was unreadable twice; page skipped")
             log(f"page {page.number}/{page.total} · {page.mode} · FAILED · {seconds} s")
             continue
         out.warnings += _merge_header(out.header, header_page, reply, page.number)
-        rows = _clean_rows(reply, page.number, out.warnings)
+        rows, row_warnings = _clean_rows(reply, page.number)
         out.results += rows
+        out.warnings += row_warnings
         out.pages.append({"page": page.number, "mode": page.mode, "results": len(rows), "seconds": seconds})
         log(f"page {page.number}/{page.total} · {page.mode} · {_count(len(rows), 'result')} · {seconds} s")
 
@@ -93,9 +95,9 @@ def _merge_header(header: dict, header_page: dict, reply: PageExtraction, page_n
     return warnings
 
 
-def _clean_rows(reply: PageExtraction, page_number: int, warnings: list[str]) -> list[dict]:
-    """The page's results, tidied; rows that can't be trusted are dropped with a warning."""
-    rows, seen = [], set()
+def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[dict], list[str]]:
+    """The page's results, tidied, and warnings for the rows dropped as untrustworthy."""
+    rows, warnings, seen = [], [], set()
     for row in reply.results:
         raw_name, value_text, unit = _clean(row.raw_name), _clean(row.value_text), _clean(row.unit)
         if value_text is None:
@@ -119,7 +121,7 @@ def _clean_rows(reply: PageExtraction, page_number: int, warnings: list[str]) ->
             "unit": unit,
             "ref_text": _clean(row.ref_text),
         })
-    return rows
+    return rows, warnings
 
 
 def _repeat_warnings(results: list[dict]) -> list[str]:

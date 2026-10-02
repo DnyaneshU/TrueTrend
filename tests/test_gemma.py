@@ -106,6 +106,11 @@ def test_schema_requires_every_field_and_limits_test_codes():
     assert set(schema["$defs"]["ExtractedResult"]["properties"]["test_code"]["enum"]) == codes
 
 
+def test_prompt_excludes_the_cbc_look_alikes_of_haemoglobin():
+    exclusions = gemma.SYSTEM_PROMPT.split("Do NOT include:")[1].split("\n")[0]
+    assert "MCH" in exclusions and "MCHC" in exclusions
+
+
 def test_prompt_describes_every_test_code():
     for code in typing.get_args(lab_tests.TestCode):
         assert f"\n  {code} " in gemma.SYSTEM_PROMPT

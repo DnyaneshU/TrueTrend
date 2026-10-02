@@ -43,7 +43,7 @@ Fields:
 - report_date: the date the report was released, as printed (labels such as "Reported", "Report Date", "Reported On").
 - results: one entry for each result of ONLY these tests:
 {_TEST_LIST}
-  Do NOT include: Total T4 or T4, T3, LDL/HDL or other ratios, VLDL, non-HDL cholesterol, Estimated Average Glucose, Mean Blood Glucose, Random Blood Sugar, BUN / Blood Urea Nitrogen, any urine test, or any other test.
+  Do NOT include: Total T4 or T4, T3, LDL/HDL or other ratios, VLDL, non-HDL cholesterol, Estimated Average Glucose, Mean Blood Glucose, Random Blood Sugar, MCH, MCHC, BUN / Blood Urea Nitrogen, any urine test, or any other test.
   Haemoglobin (HB) and HbA1c are different tests.
   For each result: raw_name = the test name exactly as printed; value_text = the result exactly as printed (keep "<", ">" and all decimals); unit = as printed, or null; ref_text = the reference range exactly as printed, or null.
   If none of these tests are on this page, results is [].
