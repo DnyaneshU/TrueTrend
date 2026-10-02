@@ -95,21 +95,28 @@ def _merge_header(header: dict, header_page: dict, reply: PageExtraction, page_n
 
 def _clean_rows(reply: PageExtraction, page_number: int, warnings: list[str]) -> list[dict]:
     """The page's results, tidied; rows that can't be trusted are dropped with a warning."""
-    rows = []
+    rows, seen = [], set()
     for row in reply.results:
-        raw_name = _clean(row.raw_name) or ""
-        value_text = _clean(row.value_text)
-        problem = (f"{row.test_code} had no value" if value_text is None
-                   else name_conflict(row.test_code, raw_name))
+        raw_name, value_text, unit = _clean(row.raw_name), _clean(row.value_text), _clean(row.unit)
+        if value_text is None:
+            problem = f"{row.test_code} had no value"
+        elif raw_name is None:
+            problem = f"{row.test_code} had no test name"
+        else:
+            problem = name_conflict(row.test_code, raw_name)
         if problem:
             warnings.append(f"page {page_number}: {problem}; row dropped")
             continue
+        if (row.test_code, value_text, unit) in seen:
+            warnings.append(f"page {page_number}: {row.test_code} {value_text} was listed twice; kept once")
+            continue
+        seen.add((row.test_code, value_text, unit))
         rows.append({
             "page": page_number,
             "test_code": row.test_code,
             "raw_name": raw_name,
             "value_text": value_text,
-            "unit": _clean(row.unit),
+            "unit": unit,
             "ref_text": _clean(row.ref_text),
         })
     return rows
