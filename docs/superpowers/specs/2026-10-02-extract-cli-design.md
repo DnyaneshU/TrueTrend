@@ -14,13 +14,14 @@ Every saved row is `status = needs_check` with `check_notes = 'not verified yet'
 | Topic | Decision |
 |---|---|
 | Granularity | One Gemma call per page (approach A). The code assigns page numbers, not the model. |
-| Digital pages | PyMuPDF words are regrouped into visual rows: words whose vertical centres are close form one line, sorted left→right; a horizontal gap wider than the text height becomes ` \| `. So a table row reads `HbA1c \| 6.8 \| % \| 4.0 - 5.6`. |
+| Digital pages | PyMuPDF words are regrouped into visual rows: words whose vertical centres are within half a text height form one line, sorted left→right; a horizontal gap wider than 0.6 × the text height becomes ` \| ` (measured: word spaces ≈ 0.2 ×, table column gaps > 3 ×). So a table row reads `HbA1c \| 6.8 \| % \| 4.0 - 5.6`. |
 | Scanned pages | Fewer than 50 non-whitespace characters of text → render the page to PNG at 150 DPI → same call with the image (Gemma vision). Threshold to be tuned on real reports. |
 | Which tests | Only the 15 MVP tests. The prompt lists them with common alternate names and explicit exclusions: Total T4 (only Free T4), LDL/HDL ratio, VLDL, urine glucose/creatinine, random blood sugar, BUN, and Hb vs HbA1c confusion. Switching to "every test" later is a prompt/schema change. |
 | Test codes | `HBA1C, GLU_F, GLU_PP, TSH, FT4, CHOL, LDL, HDL, TG, CREAT, HB, VITD, B12, URIC, UREA` — an enum in the JSON schema, so Gemma can only answer with these. Saved to `results.test_code` as Gemma's suggestion; normalize.py confirms it on Saturday. |
 | Copy, don't compute | Gemma returns name, value, unit, reference range and dates **exactly as printed**. No numeric parsing today (`value`, `ref_low`, … stay NULL for normalize.py). |
-| Dates | Code parses the printed text day-first (DD/MM) with `python-dateutil` into ISO `YYYY-MM-DD`. Partial or unparseable dates → NULL + warning. `sample_date` = collection date. |
-| Ollama call | Official `ollama` package. `format` = JSON schema from a Pydantic model; reply validated with the same model. Options: `think=False`, `temperature=0`, `num_ctx=8192`, `num_predict=2048`. |
+| Dates | Code parses the printed text day-first (DD/MM) with `python-dateutil` into ISO `YYYY-MM-DD`; text already in `YYYY-MM-DD` form is read year-first (day-first parsing would turn `2026-09-12` into 9 Dec). Partial or unparseable dates → NULL + warning. `sample_date` = collection date. |
+| Ollama call | Official `ollama` package. `format` = JSON schema from a Pydantic model; reply validated with the same model. Options: `think=False`, `temperature=0`, `num_ctx=8192`, `num_predict=2048`. The prompt asks for compact single-line JSON (measured: 30 s vs 48 s for the same page). The one retry uses `temperature=0.3`, since repeating an identical temperature-0 call would usually give the same broken answer. |
+| Measured baseline | Synthetic page, 5 MVP tests + 4 look-alikes: all 5 correct, all 4 excluded; ~31 s per page warm, ~30 s extra for the first model load. |
 | Merging pages | Header fields (patient name/age/sex, lab, dates): first non-null value in page order; a later page with a different non-null value adds a warning. Results: concatenated in page order. |
 
 **Per-page JSON schema (Pydantic):**
@@ -69,7 +70,8 @@ Non-fatal — warning on stderr and in the JSON, report saved, exit 0:
   skipped (`mode: failed`).
 - No MVP tests found on any page (report saved with zero results, so a re-run is skipped
   unless `--force`).
-- Unparseable date; pages disagreeing on a header field.
+- Unparseable or missing sample date; pages disagreeing on a header field; the same test
+  appearing on more than one page (all occurrences are kept, each with its page).
 
 ## Testing (pytest, no Gemma needed)
 
@@ -83,12 +85,16 @@ Non-fatal — warning on stderr and in the JSON, report saved, exit 0:
 ## Files
 
 ```
-requirements.txt   # pymupdf, ollama, pydantic, python-dateutil, pytest
-.gitignore         # storage/, *.db, .env, __pycache__/, .venv/
+requirements.txt   # exact pins: pymupdf, ollama, pydantic, python-dateutil, httpx, pytest
+.gitignore         # storage/, *.db, .env, __pycache__/, .venv/, and *.pdf outside samples/
+pytest.ini         # pythonpath = . so `pytest` finds the app package
 README.md          # setup + the one command
 app/__init__.py
-app/db.py          # schema, connect(), save/find/delete report
+app/db.py          # schema, connect(), find_report_id(), save_report()
 app/extract.py     # PDF → pages → Gemma → merge → print + save; CLI entry point
-tests/             # test_db.py, test_extract.py
+tests/             # conftest.py (synthetic PDF builder), test_db.py, test_extract_*.py
+                   # (pdf, dates, gemma, pipeline, run), test_live_gemma.py (real Gemma,
+                   # runs only with AROGYA_LIVE=1)
 ```
+`*.pdf` is ignored outside `samples/` so a real report dropped into the repo for testing can't be committed by accident.
 `web/`, `data/`, `eval/`, `samples/` are created when their part is built.
