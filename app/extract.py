@@ -9,16 +9,18 @@ Every saved row is `needs_check` until verify.py exists.
 """
 import re
 import statistics
-from dataclasses import dataclass
+import sys
+import time
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 import httpx
 import ollama
 import pymupdf
 from dateutil import parser as dateparser
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 DEFAULT_MODEL = "gemma4:e4b"
 OLLAMA_OPTIONS = {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
@@ -280,3 +282,113 @@ def name_conflict(test_code: str, raw_name: str) -> str | None:
     if must.search(raw_name) and not (must_not and must_not.search(raw_name)):
         return None
     return f"'{raw_name}' is not {test_code}"
+
+
+HEADER_FIELDS = ("patient_name", "age", "sex", "lab_name", "sample_date", "report_date")
+DATE_FIELDS = ("sample_date", "report_date")
+
+Ask = Callable[[PageInput, bool], PageExtraction]  # (page, retry) -> reply
+
+
+@dataclass
+class Extraction:
+    header: dict[str, str | None]
+    results: list[dict] = field(default_factory=list)
+    pages: list[dict] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    replies: list[dict] = field(default_factory=list)   # stored as reports.raw_json
+
+
+def log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+def _clean(text: str | None) -> str | None:
+    """Collapse whitespace; empty text becomes None."""
+    if text is None:
+        return None
+    return " ".join(text.split()) or None
+
+
+def _same(field_name: str, a: str, b: str) -> bool:
+    if field_name in DATE_FIELDS and parse_date(a) is not None:
+        return parse_date(a) == parse_date(b)
+    return a.casefold() == b.casefold()
+
+
+def _ask_with_retry(ask: Ask, page: PageInput) -> PageExtraction | None:
+    for retry in (False, True):
+        try:
+            return ask(page, retry)
+        except ValidationError:
+            continue
+    return None
+
+
+def extract_pages(pages: list[PageInput], ask: Ask) -> Extraction:
+    """Ask Gemma about each page and merge the answers into one report."""
+    out = Extraction(header=dict.fromkeys(HEADER_FIELDS))
+    header_page: dict[str, int] = {}
+    for page in pages:
+        started = time.perf_counter()
+        reply = _ask_with_retry(ask, page)
+        seconds = round(time.perf_counter() - started, 1)
+        if reply is None:
+            out.pages.append({"page": page.number, "mode": "failed", "results": 0, "seconds": seconds})
+            out.replies.append({"page": page.number, "mode": page.mode, "reply": None})
+            out.warnings.append(f"page {page.number}: Gemma's answer was unreadable twice; page skipped")
+            log(f"page {page.number}/{page.total} · {page.mode} · FAILED · {seconds} s")
+            continue
+        out.replies.append({"page": page.number, "mode": page.mode, "reply": reply.model_dump()})
+
+        for name in HEADER_FIELDS:
+            value = _clean(getattr(reply, name))
+            if value is None:
+                continue
+            if out.header[name] is None:
+                out.header[name], header_page[name] = value, page.number
+            elif not _same(name, out.header[name], value):
+                first = header_page[name]
+                out.warnings.append(
+                    f"page {page.number}: {name} '{value}' differs from page {first} "
+                    f"('{out.header[name]}'); kept page {first}"
+                )
+
+        kept = 0
+        for row in reply.results:
+            raw_name = _clean(row.raw_name) or ""
+            value_text = _clean(row.value_text)
+            if value_text is None:
+                out.warnings.append(f"page {page.number}: {row.test_code} had no value; row dropped")
+                continue
+            conflict = name_conflict(row.test_code, raw_name)
+            if conflict:
+                out.warnings.append(f"page {page.number}: {conflict}; row dropped")
+                continue
+            out.results.append({
+                "page": page.number,
+                "test_code": row.test_code,
+                "raw_name": raw_name,
+                "value_text": value_text,
+                "unit": _clean(row.unit),
+                "ref_text": _clean(row.ref_text),
+            })
+            kept += 1
+        out.pages.append({"page": page.number, "mode": page.mode, "results": kept, "seconds": seconds})
+        log(f"page {page.number}/{page.total} · {page.mode} · {kept} result{'' if kept == 1 else 's'} · {seconds} s")
+
+    if all(p["mode"] == "failed" for p in out.pages):
+        raise ExtractError(
+            "Gemma's answer was unreadable for every page, so nothing was saved. "
+            "Try again, or try --model gemma4:e2b."
+        )
+
+    found_on: dict[str, list[int]] = {}
+    for result in out.results:
+        found_on.setdefault(result["test_code"], []).append(result["page"])
+    for code, on_pages in found_on.items():
+        if len(on_pages) > 1:
+            out.warnings.append(
+                f"{code} appears {len(on_pages)} times (pages {', '.join(map(str, on_pages))}); all kept"
+            )
+    return out
