@@ -9,7 +9,7 @@ with a warning. Every saved row is `needs_check` until verify.py exists.
 """
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 from pydantic import ValidationError
@@ -24,6 +24,7 @@ HEADER_FIELDS = ("patient_name", "age", "sex", "lab_name", "sample_date", "repor
 DATE_FIELDS = ("sample_date", "report_date")
 
 Ask = Callable[[PageInput, bool], PageExtraction]  # (page, retry) -> reply
+Transcribe = Callable[[PageInput], str]            # scanned page -> its text
 
 
 @dataclass
@@ -39,15 +40,21 @@ def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def extract_pages(pages: list[PageInput], ask: Ask) -> Extraction:
-    """Ask Gemma about each page and merge the answers into one report."""
+def extract_pages(pages: list[PageInput], ask: Ask, transcribe: Transcribe) -> Extraction:
+    """Ask Gemma about each page and merge the answers into one report.
+
+    A scanned page is transcribed once first; a retry reuses the transcription.
+    """
     out = Extraction(header=dict.fromkeys(HEADER_FIELDS))
     header_page: dict[str, int] = {}   # which page each header value came from
     for page in pages:
         started = time.perf_counter()
+        if page.mode == "vision":
+            page = replace(page, text=transcribe(page))
         reply = _ask_with_retry(ask, page)
         seconds = round(time.perf_counter() - started, 1)
         out.replies.append({"page": page.number, "mode": page.mode,
+                            "transcription": page.text if page.mode == "vision" else None,
                             "reply": reply.model_dump() if reply else None})
         if reply is None:
             out.pages.append({"page": page.number, "mode": "failed", "results": 0, "seconds": seconds})
