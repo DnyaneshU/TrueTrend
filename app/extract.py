@@ -243,3 +243,40 @@ def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtractio
             "Lost the connection to Ollama while reading the report. Is it still running?"
         ) from None
     return PageExtraction.model_validate_json(response.message.content)
+
+
+# Code checks Gemma's test_code against the printed name, because Gemma (vision mode
+# especially) sometimes files a look-alike under an MVP code: seen "Estimated Average
+# Glucose" as GLU_F and "Total T4" as FT4. Per code: (the name must match, the name
+# must not match), case-insensitive.
+NAME_RULES: dict[str, tuple[str, str | None]] = {
+    "HBA1C": (r"a1c|glyc", None),
+    "GLU_F": (r"fasting|\bf(bs|bg|pg)?\b",
+              r"estimated|average|mean|random|\brbs\b|post|prandial|\bpp|urine"),
+    "GLU_PP": (r"post|prandial|\bpp|\b(2|two)[\s-]*h(ou)?rs?\b",
+               r"estimated|average|mean|random|\brbs\b|fasting|urine"),
+    "TSH": (r"\btsh\b|thyroid stimulating", r"\bf?t[34]\b"),
+    "FT4": (r"free|\bft4\b", r"total|\bf?t3\b|\btsh\b"),
+    "CHOL": (r"cholesterol|\bchol\b|\btc\b", r"hdl|ldl|\bnon|ratio"),
+    "LDL": (r"\bldl", r"vldl|hdl|\bnon|ratio"),
+    "HDL": (r"\bhdl", r"ldl|\bnon|ratio"),
+    "TG": (r"triglyceride|\btg\b|\btrig\b", r"ratio"),
+    "CREAT": (r"creat", r"urine|clearance|ratio|egfr|kinase|\bc?pk\b|\bck\b"),
+    "HB": (r"h(a)?emoglobin|\bhb\b|\bhgb\b", r"a1c|glyc"),
+    "VITD": (r"vit(amin)?\.?\s*d|hydroxy|\b25\b|cholecalciferol", r"1[,\s]*25|dihydroxy"),
+    "B12": (r"b\s*12|cobalamin", None),
+    "URIC": (r"uric", r"urine"),
+    "UREA": (r"urea", r"nitrogen|\bbun\b|urine"),
+}
+_NAME_PATTERNS = {
+    code: (re.compile(must, re.IGNORECASE), must_not and re.compile(must_not, re.IGNORECASE))
+    for code, (must, must_not) in NAME_RULES.items()
+}
+
+
+def name_conflict(test_code: str, raw_name: str) -> str | None:
+    """Why the printed test name can't be `test_code`, or None if it fits."""
+    must, must_not = _NAME_PATTERNS[test_code]
+    if must.search(raw_name) and not (must_not and must_not.search(raw_name)):
+        return None
+    return f"'{raw_name}' is not {test_code}"
