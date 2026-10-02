@@ -14,10 +14,16 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 
+import httpx
+import ollama
 import pymupdf
 from dateutil import parser as dateparser
+from pydantic import BaseModel
 
-SCAN_TEXT_THRESHOLD = 50          # fewer visible characters than this: the page is a scan
+DEFAULT_MODEL = "gemma4:e4b"
+OLLAMA_OPTIONS = {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
+RETRY_TEMPERATURE = 0.3   # a second temperature-0 call would usually repeat the same broken reply
+SCAN_TEXT_THRESHOLD = 50         # fewer visible characters than this: the page is a scan
 IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
 IMAGE_PAGE_COVERAGE = 0.5         # of the page (a scan with a typed header or footer)
 RENDER_DPI = 150
@@ -144,3 +150,96 @@ def parse_date(text: str | None) -> str | None:
     if first.date() != second.date():  # day, month or year was missing and came from the default
         return None
     return first.date().isoformat()
+
+
+TestCode = Literal[
+    "HBA1C", "GLU_F", "GLU_PP", "TSH", "FT4", "CHOL", "LDL", "HDL",
+    "TG", "CREAT", "HB", "VITD", "B12", "URIC", "UREA",
+]
+
+
+class ExtractedResult(BaseModel):
+    test_code: TestCode
+    raw_name: str
+    value_text: str
+    unit: str | None
+    ref_text: str | None
+
+
+class PageExtraction(BaseModel):
+    patient_name: str | None
+    age: str | None
+    sex: str | None
+    lab_name: str | None
+    sample_date: str | None
+    report_date: str | None
+    results: list[ExtractedResult]
+
+
+PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
+
+SYSTEM_PROMPT = """You read one page of an Indian medical laboratory report and copy data exactly as printed.
+Never calculate, convert, round, translate or guess. If something is not printed on this page, use null.
+
+Fields:
+- patient_name, age, sex, lab_name: exactly as printed on this page, or null.
+- sample_date: the sample COLLECTION date and time as printed (labels such as "Collected", "Sample Collected On", "Collection Date", "Drawn"). Not the registration date and not the report date.
+- report_date: the date the report was released, as printed (labels such as "Reported", "Report Date", "Reported On").
+- results: one entry for each result of ONLY these tests:
+  HBA1C  = HbA1c, Glycated / Glycosylated Haemoglobin
+  GLU_F  = Fasting blood or plasma glucose, FBS, Fasting Blood Sugar
+  GLU_PP = Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose
+  TSH    = TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)
+  FT4    = Free T4, FT4, Free Thyroxine
+  CHOL   = Total Cholesterol
+  LDL    = LDL Cholesterol (direct or calculated)
+  HDL    = HDL Cholesterol
+  TG     = Triglycerides
+  CREAT  = Serum Creatinine
+  HB     = Haemoglobin / Hemoglobin / Hb
+  VITD   = 25-Hydroxy (25-OH) Vitamin D, Vitamin D Total
+  B12    = Vitamin B12, Cyanocobalamin
+  URIC   = Uric Acid
+  UREA   = Urea, Blood Urea, Serum Urea
+  Do NOT include: Total T4 or T4, T3, LDL/HDL or other ratios, VLDL, non-HDL cholesterol, Estimated Average Glucose, Mean Blood Glucose, Random Blood Sugar, BUN / Blood Urea Nitrogen, any urine test, or any other test.
+  Haemoglobin (HB) and HbA1c are different tests.
+  For each result: raw_name = the test name exactly as printed; value_text = the result exactly as printed (keep "<", ">" and all decimals); unit = as printed, or null; ref_text = the reference range exactly as printed, or null.
+  If none of these tests are on this page, results is [].
+In the page text, each line is one printed line and " | " separates table columns.
+Reply with compact JSON on a single line, no indentation."""
+
+
+def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
+    """One Gemma call for one page.
+
+    Raises pydantic.ValidationError if the reply does not fit the schema, and
+    ExtractError if Ollama is unreachable, the model is missing or the connection drops.
+    """
+    intro = f"Page {page.number} of {page.total}."
+    if page.mode == "vision":
+        user = {"role": "user", "content": f"{intro} The page is attached as an image.",
+                "images": [page.image]}
+    else:
+        user = {"role": "user", "content": f"{intro} Page text:\n\n{page.text}"}
+    options = dict(OLLAMA_OPTIONS, temperature=RETRY_TEMPERATURE) if retry else dict(OLLAMA_OPTIONS)
+    try:
+        response = ollama.chat(
+            model=model,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, user],
+            format=PAGE_SCHEMA,
+            options=options,
+            think=False,
+        )
+    except ConnectionError:
+        raise ExtractError(
+            "Can't reach Ollama. Start the Ollama app (or run: ollama serve) and try again."
+        ) from None
+    except ollama.ResponseError as error:
+        if error.status_code == 404:
+            raise ExtractError(f"Model {model} is not installed. Run: ollama pull {model}") from None
+        raise ExtractError(f"Ollama error: {error.error}") from None
+    except httpx.TransportError:
+        raise ExtractError(
+            "Lost the connection to Ollama while reading the report. Is it still running?"
+        ) from None
+    return PageExtraction.model_validate_json(response.message.content)
