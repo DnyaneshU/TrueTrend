@@ -1,0 +1,16 @@
+# Real reports and patient data never go into the repo
+storage/
+*.db
+*.db-journal
+*.pdf
+!samples/**/*.pdf
+/out*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Secrets
+.env
