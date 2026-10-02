@@ -15,8 +15,14 @@ def make_report(sha256="abc123", **overrides):
 
 def make_result(**overrides):
     result = {
-        "test_code": "HBA1C", "raw_name": "HbA1c", "raw_value_text": "7.2", "unit": "%",
-        "ref_text": "4.0 - 5.6", "flag": None, "page": 1, "status": "needs_check",
+        "test_code": "HBA1C",
+        "raw_name": "HbA1c",
+        "raw_value_text": "7.2",
+        "unit": "%",
+        "ref_text": "4.0 - 5.6",
+        "flag": None,
+        "page": 1,
+        "status": "needs_check",
         "check_notes": "not verified yet",
     }
     result.update(overrides)
@@ -42,13 +48,18 @@ def test_connect_creates_missing_folder(tmp_path):
 
 
 def test_save_report_and_find_it(conn):
-    report_id = db.save_report(conn, make_report(), [
-        make_result(),
-        make_result(test_code="HB", raw_name="Haemoglobin", raw_value_text="12.1"),
-    ])
+    report_id = db.save_report(
+        conn,
+        make_report(),
+        [
+            make_result(),
+            make_result(test_code="HB", raw_name="Haemoglobin", raw_value_text="12.1"),
+        ],
+    )
     assert db.find_report_id(conn, "abc123") == report_id
     rows = conn.execute(
-        "SELECT test_code, status, check_notes, page FROM results WHERE report_id = ? ORDER BY id", (report_id,)
+        "SELECT test_code, status, check_notes, page FROM results WHERE report_id = ? ORDER BY id",
+        (report_id,),
     ).fetchall()
     assert [tuple(r) for r in rows] == [
         ("HBA1C", "needs_check", "not verified yet", 1),

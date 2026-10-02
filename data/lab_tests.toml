@@ -1,0 +1,137 @@
+# The MVP lab tests Arogya Vahi reads from reports, and the words labs print.
+#
+# Editing this file changes what is extracted and how Gemma's answers are checked;
+# no code changes are needed.
+#
+# Each [[tests]] entry:
+#   code       the code results are saved under
+#   name       its plain-English name
+#   prompt     how the prompt describes the test to Gemma
+#   names      a printed test name must contain one of these words or phrases...
+#   not_names  ...and none of these: look-alike tests labs print nearby
+#
+# Names are compared after normalising spelling: case is ignored, punctuation becomes
+# a space, dotted abbreviations are joined ("T.S.H." = "TSH"), and letters are split
+# from digits ("B-12" = "B12" = "B 12"). Words and phrases match whole words only.
+
+# Listed in the prompt as tests Gemma must not return.
+prompt_exclusions = [
+    "Total T4 or T4", "T3", "LDL/HDL or other ratios", "VLDL", "non-HDL cholesterol",
+    "Estimated Average Glucose", "Mean Blood Glucose", "Random Blood Sugar", "MCH", "MCHC",
+    "haemoglobin fractions (Hb A, Hb A2, HbF)", "BUN / Blood Urea Nitrogen", "any urine test",
+]
+
+[report]
+# High/low marks labs print in the same cell as the value ("H 168.0", "18.0 L").
+flags = ["HH", "LL", "H", "L"]
+# What Gemma sometimes writes instead of leaving a field empty.
+empty_words = ["null", "none", "n/a", "-"]
+
+[[tests]]
+code = "HBA1C"
+name = "HbA1c"
+prompt = "HbA1c, Glycated / Glycosylated Haemoglobin"
+names = ["HbA1c", "A1c", "glycated", "glycosylated", "glycohaemoglobin", "glycohemoglobin"]
+not_names = []
+
+[[tests]]
+code = "GLU_F"
+name = "Fasting glucose"
+prompt = "Fasting blood or plasma glucose, FBS, Fasting Blood Sugar"
+names = ["fasting", "FBS", "FBG", "FPG", "F"]
+not_names = ["estimated", "average", "mean", "random", "RBS", "post", "prandial", "postprandial",
+             "PP", "PPBS", "urine", "urinary"]
+
+[[tests]]
+code = "GLU_PP"
+name = "Post-prandial glucose"
+prompt = "Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose"
+names = ["post", "prandial", "postprandial", "PP", "PPBS", "PPBG", "2 hr", "2 hrs", "2 hour",
+         "2 hours", "two hour", "two hours"]
+not_names = ["estimated", "average", "mean", "random", "RBS", "fasting", "urine", "urinary"]
+
+[[tests]]
+code = "TSH"
+name = "TSH"
+prompt = "TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)"
+names = ["TSH", "thyroid stimulating"]
+not_names = ["T3", "T4", "FT3", "FT4"]
+
+[[tests]]
+code = "FT4"
+name = "Free T4"
+prompt = "Free T4, FT4, Free Thyroxine"
+names = ["free", "FT4"]
+not_names = ["total", "T3", "FT3", "TSH"]
+
+[[tests]]
+code = "CHOL"
+name = "Total cholesterol"
+prompt = "Total Cholesterol"
+names = ["cholesterol", "chol", "TC"]
+not_names = ["HDL", "LDL", "VLDL", "density", "lipoprotein", "non", "ratio"]
+
+[[tests]]
+code = "LDL"
+name = "LDL cholesterol"
+prompt = "LDL Cholesterol (direct or calculated)"
+names = ["LDL", "low density"]
+not_names = ["VLDL", "very", "HDL", "high density", "non", "ratio"]
+
+[[tests]]
+code = "HDL"
+name = "HDL cholesterol"
+prompt = "HDL Cholesterol"
+names = ["HDL", "high density"]
+not_names = ["LDL", "VLDL", "low density", "non", "ratio"]
+
+[[tests]]
+code = "TG"
+name = "Triglycerides"
+prompt = "Triglycerides"
+names = ["triglyceride", "triglycerides", "TG", "trig", "trigs"]
+not_names = ["ratio"]
+
+[[tests]]
+code = "CREAT"
+name = "Creatinine"
+prompt = "Serum Creatinine"
+names = ["creatinine", "creat"]
+not_names = ["urine", "urinary", "clearance", "ratio", "eGFR", "GFR", "creatine", "kinase", "CK", "CPK"]
+
+[[tests]]
+code = "HB"
+name = "Haemoglobin"
+prompt = "Haemoglobin / Hemoglobin / Hb"
+names = ["haemoglobin", "hemoglobin", "Hb", "Hgb"]
+# HbA1c and glycated Hb; the blood-count indices MCH and MCHC; electrophoresis fractions
+not_names = ["A1c", "HbA1c", "glycated", "glycosylated", "corpuscular", "MCH", "MCHC", "urine",
+             "HbA", "Hb A", "Hb F", "HbF", "Hb S", "HbS", "foetal", "fetal", "electrophoresis", "HPLC"]
+
+[[tests]]
+code = "VITD"
+name = "Vitamin D (25-OH)"
+prompt = "25-Hydroxy (25-OH) Vitamin D, Vitamin D Total"
+names = ["vitamin D", "vit D", "cholecalciferol", "25 OH", "25 hydroxy", "25 hydroxyvitamin"]
+not_names = ["1,25", "dihydroxy"]
+
+[[tests]]
+code = "B12"
+name = "Vitamin B12"
+prompt = "Vitamin B12, Cyanocobalamin"
+names = ["B12", "cobalamin", "cyanocobalamin", "methylcobalamin"]
+not_names = []
+
+[[tests]]
+code = "URIC"
+name = "Uric acid"
+prompt = "Uric Acid"
+names = ["uric"]
+not_names = ["urine", "urinary", "ratio"]
+
+[[tests]]
+code = "UREA"
+name = "Urea"
+prompt = "Urea, Blood Urea, Serum Urea"
+names = ["urea"]
+not_names = ["nitrogen", "BUN", "urine", "urinary", "ratio"]

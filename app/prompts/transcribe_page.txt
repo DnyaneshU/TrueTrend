@@ -1,0 +1,1 @@
+Transcribe every line of text on this page exactly, one line per row.

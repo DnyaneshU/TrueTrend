@@ -21,6 +21,17 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+.hypothesis/
+.ruff_cache/
+# build artifacts from `pip install -e .`
+*.egg-info/
+build/
+dist/
 
 # Secrets
 .env
+
+# Development notes and AI-assistant working files: kept locally, not part of the app
+CLAUDE.md
+docs/superpowers/
+.superpowers/

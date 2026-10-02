@@ -1,15 +1,22 @@
-"""One call to local Gemma (through Ollama) per page, with the reply held to a JSON schema."""
+"""Calls to local Gemma through Ollama: transcribing scans, and picking the MVP tests
+out of a page's text with the reply held to a JSON schema.
+
+Scans are read in two steps. Asked to read the image, pick the tests and fill the
+schema all at once, Gemma returned 2 of 6 tests on a scanned page; asked only to
+transcribe it, it read every line, and the text step then found all 6.
+"""
+
+from importlib import resources
+from string import Template
+
 import httpx
 import ollama
 from pydantic import BaseModel
 
+from app.config import settings
 from app.errors import ExtractError
-from app.lab_tests import LAB_TESTS, TestCode
+from app.lab_tests import CATALOG, TestCode
 from app.pages import PageInput
-
-DEFAULT_MODEL = "gemma4:e4b"
-OLLAMA_OPTIONS = {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
-RETRY_TEMPERATURE = 0.3   # a second temperature-0 call would usually repeat the same broken reply
 
 
 class ExtractedResult(BaseModel):
@@ -20,6 +27,8 @@ class ExtractedResult(BaseModel):
     ref_text: str | None
 
 
+# What Gemma returns for one page; every key is required, values may be null.
+# (No docstring: Pydantic would put it into the schema sent to Gemma.)
 class PageExtraction(BaseModel):
     patient_name: str | None
     age: str | None
@@ -32,36 +41,25 @@ class PageExtraction(BaseModel):
 
 PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
 
-_TEST_LIST = "\n".join(f"  {test.code:<6} = {test.described_as}" for test in LAB_TESTS)
 
-SYSTEM_PROMPT = f"""You read one page of an Indian medical laboratory report and copy data exactly as printed.
-Never calculate, convert, round, translate or guess. If something is not printed on this page, use null.
-
-Fields:
-- patient_name, age, sex, lab_name: exactly as printed on this page, or null.
-- sample_date: the sample COLLECTION date and time as printed (labels such as "Collected", "Sample Collected On", "Collection Date", "Drawn"). Not the registration date and not the report date.
-- report_date: the date the report was released, as printed (labels such as "Reported", "Report Date", "Reported On").
-- results: one entry for each result of ONLY these tests:
-{_TEST_LIST}
-  Do NOT include: Total T4 or T4, T3, LDL/HDL or other ratios, VLDL, non-HDL cholesterol, Estimated Average Glucose, Mean Blood Glucose, Random Blood Sugar, MCH, MCHC, haemoglobin fractions (Hb A, Hb A2, HbF), BUN / Blood Urea Nitrogen, any urine test, or any other test.
-  Haemoglobin (HB) and HbA1c are different tests.
-  For each result: raw_name = the test name exactly as printed; value_text = the result exactly as printed (keep "<", ">" and all decimals); unit = as printed, or null; ref_text = the reference range exactly as printed, or null.
-  If none of these tests are on this page, results is [].
-In the page text, each line is one printed line and " | " separates table columns.
-Reply with compact JSON on a single line, no indentation."""
+def _prompt(name: str) -> str:
+    return resources.files("app").joinpath("prompts", name).read_text(encoding="utf-8").rstrip("\n")
 
 
-# Scans are read in two steps. Asked to read the image, pick the tests and fill the
-# schema all at once, Gemma returned 2 of 6 tests; asked only to transcribe, it read
-# every line, and the text step then found all 6.
-TRANSCRIBE_PROMPT = "Transcribe every line of text on this page exactly, one line per row."
+SYSTEM_PROMPT = Template(_prompt("extract_page.txt")).substitute(
+    test_list="\n".join(f"  {test.code:<6} = {test.prompt}" for test in CATALOG.tests),
+    exclusions=", ".join(CATALOG.prompt_exclusions),
+)
+TRANSCRIBE_PROMPT = _prompt("transcribe_page.txt")
 
 
 def transcribe(page: PageInput, model: str) -> str:
     """Gemma reads a scanned page's image into plain text, line by line."""
-    response = _chat(model=model, options=OLLAMA_OPTIONS, messages=[
-        {"role": "user", "content": TRANSCRIBE_PROMPT, "images": [page.image]},
-    ])
+    response = _chat(
+        model=model,
+        options=settings.ollama_options(),
+        messages=[{"role": "user", "content": TRANSCRIBE_PROMPT, "images": [page.image]}],
+    )
     return response.message.content
 
 
@@ -73,11 +71,15 @@ def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtractio
     """
     if not page.text:
         raise ValueError(f"page {page.number} has no text; transcribe scanned pages first")
-    options = {**OLLAMA_OPTIONS, "temperature": RETRY_TEMPERATURE} if retry else OLLAMA_OPTIONS
-    response = _chat(model=model, options=options, format=PAGE_SCHEMA, messages=[
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"Page {page.number} of {page.total}. Page text:\n\n{page.text}"},
-    ])
+    response = _chat(
+        model=model,
+        options=settings.ollama_options(retry),
+        format=PAGE_SCHEMA,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"Page {page.number} of {page.total}. Page text:\n\n{page.text}"},
+        ],
+    )
     return PageExtraction.model_validate_json(response.message.content)
 
 

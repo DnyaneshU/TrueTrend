@@ -71,7 +71,9 @@ def test_read_pages_sends_scan_with_typed_footer_as_image():
     with pymupdf.open() as doc:
         page = doc.new_page()
         page.insert_image(page.rect, stream=scan_image())
-        page.insert_text((50, 820), "This is a computer generated report. Scanned with CamScanner.", fontsize=8)
+        page.insert_text(
+            (50, 820), "This is a computer generated report. Scanned with CamScanner.", fontsize=8
+        )
         (result,) = read_pages(doc)
     assert result.mode == "vision"
 
