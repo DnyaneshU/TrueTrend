@@ -74,6 +74,24 @@ def test_sections_reported_at_different_times_are_not_a_conflict():
     assert out.warnings == []
 
 
+def test_the_word_null_from_gemma_means_empty():
+    ask = ScriptedAsk({1: [reply([row(unit="null", ref="N/A")], lab_name="null", sample_date="None")],
+                       2: [reply(lab_name="HOD Head Office")]})
+    out = extract_pages(pages(2), ask, no_transcribe)
+    assert out.header["lab_name"] == "HOD Head Office" and out.header["sample_date"] is None
+    assert (out.results[0]["unit"], out.results[0]["ref_text"]) == (None, None)
+    assert out.warnings == []
+
+
+def test_same_age_or_lab_written_differently_is_not_a_conflict():
+    ask = ScriptedAsk({1: [reply(age="60 Y", lab_name="LPL-ROHINI (NATIONAL REFERENCE LAB)")],
+                       2: [reply(age="60", lab_name="NATIONAL REFERENCE LAB")],
+                       3: [reply(age="61 Years")]})
+    out = extract_pages(pages(3), ask, no_transcribe)
+    assert out.header["age"] == "60 Y"
+    assert len(out.warnings) == 1 and "61 Years" in out.warnings[0]  # a different age still warns
+
+
 def test_same_header_in_other_case_or_date_format_is_not_a_conflict():
     ask = ScriptedAsk({
         1: [reply(patient_name="Mrs. Sunita Patil", sample_date="12/09/2026 08:10")],

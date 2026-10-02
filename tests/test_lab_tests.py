@@ -23,7 +23,7 @@ MATCHING = [
     ("HB", "Haemoglobin"), ("HB", "Hemoglobin (Hb)"), ("HB", "HGB"),
     ("VITD", "25-Hydroxy Vitamin D"), ("VITD", "Vitamin D Total (25-OH)"), ("VITD", "Vit. D3"),
     ("VITD", "25(OH)D"), ("VITD", "25-OH Cholecalciferol"),
-    ("B12", "Vitamin B12"), ("B12", "Cyanocobalamin"), ("B12", "Vit B 12"),
+    ("B12", "Vitamin B12"), ("B12", "Cyanocobalamin"), ("B12", "Vit B 12"), ("B12", "Vitamin B-12"),
     ("URIC", "Uric Acid"), ("URIC", "Serum Uric Acid"),
     ("UREA", "Urea"), ("UREA", "Blood Urea"), ("UREA", "Serum Urea"),
 ]

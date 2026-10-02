@@ -19,6 +19,9 @@ from app.dates import parse_date
     ("08:10", None),                       # time only
     ("31/02/2026", None),
     ("garbage", None),
+    ("02 Dec, 2X", None),                  # year blanked out: must not become 2002
+    ("03:11 PM 02 Dec, 2X", None),
+    ("12-Sep", None),
     ("", None),
     (None, None),
 ])

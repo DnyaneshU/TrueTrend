@@ -31,7 +31,10 @@ from app.pages import PageInput, open_pdf, read_pages
 
 HEADER_FIELDS = ("patient_name", "age", "sex", "lab_name", "sample_date", "report_date")
 DATE_FIELDS = ("sample_date", "report_date")
-QUIET_FIELDS = ("report_date",)   # labs stamp each section with its own report time
+# Not worth a warning when pages differ: labs stamp each section with its own report
+# time, and print the lab as brand, centre or reference lab on different pages.
+QUIET_FIELDS = ("report_date", "lab_name")
+EMPTY_WORDS = {"null", "none", "n/a", "-"}   # what Gemma sometimes writes for "not printed"
 
 # The lab's high/low mark printed in the value's cell, before or after it: "H 168.0", "7.2 L".
 _FLAG_FIRST = re.compile(r"^(HH|LL|H|L)\s+(.*\d.*)$")
@@ -160,7 +163,8 @@ def _clean(text: str | None) -> str | None:
     """Collapse whitespace and drop the " | " column markers page_text added; empty becomes None."""
     if text is None:
         return None
-    return " ".join(text.replace(" | ", " ").split()) or None
+    cleaned = " ".join(text.replace(" | ", " ").split())
+    return None if not cleaned or cleaned.casefold() in EMPTY_WORDS else cleaned
 
 
 def _split_flag(value_text: str) -> tuple[str | None, str]:
@@ -173,9 +177,11 @@ def _split_flag(value_text: str) -> tuple[str | None, str]:
 
 
 def _same(field_name: str, a: str, b: str) -> bool:
-    """Equal ignoring case, or (for dates) the same day however it is written."""
+    """Equal ignoring case; the same day however it is written; the same age in years."""
     if field_name in DATE_FIELDS and (day := parse_date(a)) is not None:
         return day == parse_date(b)
+    if field_name == "age" and (years := re.findall(r"\d+", a)):
+        return years[:1] == re.findall(r"\d+", b)[:1]
     return a.casefold() == b.casefold()
 
 

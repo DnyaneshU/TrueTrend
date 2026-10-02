@@ -46,7 +46,7 @@ LAB_TESTS = (
     LabTest("VITD", "25-Hydroxy (25-OH) Vitamin D, Vitamin D Total",
             r"vit(amin)?\.?\s*d[23]?\b|cholecalciferol|25[\s(-]*(oh|hydroxy)", r"1[,\s]*25|dihydroxy"),
     LabTest("B12", "Vitamin B12, Cyanocobalamin",
-            r"b\s*12|cobalamin", None),
+            r"b[\s-]*12|cobalamin", None),
     LabTest("URIC", "Uric Acid",
             r"uric", r"urine"),
     LabTest("UREA", "Urea, Blood Urea, Serum Urea",
