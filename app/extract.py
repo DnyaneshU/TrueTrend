@@ -7,12 +7,15 @@ pages with almost no text (scans) are sent as an image. Gemma copies values
 exactly as printed; code assigns page numbers, parses dates and saves the rows.
 Every saved row is `needs_check` until verify.py exists.
 """
+import re
 import statistics
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 
 import pymupdf
+from dateutil import parser as dateparser
 
 SCAN_TEXT_THRESHOLD = 50          # fewer visible characters than this: the page is a scan
 IMAGE_PAGE_TEXT_THRESHOLD = 200   # ...or fewer than this while images cover IMAGE_PAGE_COVERAGE
@@ -113,3 +116,31 @@ def _image_coverage(page: pymupdf.Page) -> float:
     """Share of the page covered by images, 0 to 1 (overlaps count twice, hence the cap)."""
     covered = sum(abs(pymupdf.Rect(info["bbox"]) & page.rect) for info in page.get_image_info())
     return min(covered / abs(page.rect), 1.0)
+
+
+_ISO_DATE = re.compile(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b")
+_DEFAULT_A, _DEFAULT_B = datetime(2000, 1, 1), datetime(2001, 2, 2)
+
+
+def parse_date(text: str | None) -> str | None:
+    """A printed date as ISO YYYY-MM-DD, read day-first (Indian DD/MM/YYYY).
+
+    Returns None for missing, partial ("Sep 2026") or unreadable text. Parsing
+    twice with different defaults catches parts dateutil would silently fill in.
+    """
+    if not text or not text.strip():
+        return None
+    iso = _ISO_DATE.search(text)
+    if iso:
+        try:
+            return date(*map(int, iso.groups())).isoformat()
+        except ValueError:
+            return None
+    try:
+        first = dateparser.parse(text, dayfirst=True, fuzzy=True, default=_DEFAULT_A)
+        second = dateparser.parse(text, dayfirst=True, fuzzy=True, default=_DEFAULT_B)
+    except (ValueError, OverflowError):
+        return None
+    if first.date() != second.date():  # day, month or year was missing and came from the default
+        return None
+    return first.date().isoformat()
