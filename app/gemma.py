@@ -51,27 +51,40 @@ In the page text, each line is one printed line and " | " separates table column
 Reply with compact JSON on a single line, no indentation."""
 
 
+# Scans are read in two steps. Asked to read the image, pick the tests and fill the
+# schema all at once, Gemma returned 2 of 6 tests; asked only to transcribe, it read
+# every line, and the text step then found all 6.
+TRANSCRIBE_PROMPT = "Transcribe every line of text on this page exactly, one line per row."
+
+
+def transcribe(page: PageInput, model: str) -> str:
+    """Gemma reads a scanned page's image into plain text, line by line."""
+    response = _chat(model=model, options=OLLAMA_OPTIONS, messages=[
+        {"role": "user", "content": TRANSCRIBE_PROMPT, "images": [page.image]},
+    ])
+    return response.message.content
+
+
 def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
-    """One Gemma call for one page.
+    """Gemma picks the MVP tests out of one page's text (a scan's transcription for vision pages).
 
     Raises pydantic.ValidationError if the reply does not fit the schema, and
     ExtractError if Ollama is unreachable, the model is missing or the connection drops.
     """
-    intro = f"Page {page.number} of {page.total}."
-    if page.mode == "vision":
-        user = {"role": "user", "content": f"{intro} The page is attached as an image.",
-                "images": [page.image]}
-    else:
-        user = {"role": "user", "content": f"{intro} Page text:\n\n{page.text}"}
+    if not page.text:
+        raise ValueError(f"page {page.number} has no text; transcribe scanned pages first")
     options = {**OLLAMA_OPTIONS, "temperature": RETRY_TEMPERATURE} if retry else OLLAMA_OPTIONS
+    response = _chat(model=model, options=options, format=PAGE_SCHEMA, messages=[
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"Page {page.number} of {page.total}. Page text:\n\n{page.text}"},
+    ])
+    return PageExtraction.model_validate_json(response.message.content)
+
+
+def _chat(model: str, **request) -> ollama.ChatResponse:
+    """ollama.chat with thinking off, and Ollama problems turned into one-sentence ExtractErrors."""
     try:
-        response = ollama.chat(
-            model=model,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, user],
-            format=PAGE_SCHEMA,
-            options=options,
-            think=False,
-        )
+        return ollama.chat(model=model, think=False, **request)
     except ConnectionError:
         raise ExtractError(
             "Can't reach Ollama. Start the Ollama app (or run: ollama serve) and try again."
@@ -84,4 +97,3 @@ def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtractio
         raise ExtractError(
             "Lost the connection to Ollama while reading the report. Is it still running?"
         ) from None
-    return PageExtraction.model_validate_json(response.message.content)

@@ -1,4 +1,5 @@
 import typing
+from dataclasses import replace
 from types import SimpleNamespace
 
 import httpx
@@ -8,7 +9,7 @@ from pydantic import ValidationError
 
 from app import gemma, lab_tests
 from app.errors import ExtractError
-from app.gemma import PageExtraction, ask_gemma
+from app.gemma import PageExtraction, ask_gemma, transcribe
 from app.pages import PageInput
 
 VALID_REPLY = (
@@ -58,12 +59,34 @@ def test_text_page_is_sent_as_text_with_fixed_settings(fake_chat):
     assert "images" not in user
 
 
-def test_vision_page_is_sent_as_image(fake_chat):
+def test_transcribe_sends_the_page_image_without_a_schema(fake_chat):
+    fake = fake_chat(reply="Haemoglobin 11.8 g/dL 12.0 - 15.0")
+    assert transcribe(VISION_PAGE, "gemma4:e4b") == "Haemoglobin 11.8 g/dL 12.0 - 15.0"
+    call = fake.calls[0]
+    (message,) = call["messages"]
+    assert message["images"] == [VISION_PAGE.image]
+    assert "format" not in call and call["think"] is False
+    assert call["options"] == {"temperature": 0, "num_ctx": 8192, "num_predict": 2048}
+
+
+def test_transcribe_turns_ollama_problems_into_clear_errors(fake_chat):
+    fake_chat(error=ConnectionError("refused"))
+    with pytest.raises(ExtractError, match="Can't reach Ollama"):
+        transcribe(VISION_PAGE, "gemma4:e4b")
+
+
+def test_scanned_page_is_extracted_from_its_transcription(fake_chat):
     fake = fake_chat()
-    ask_gemma(VISION_PAGE, "gemma4:e4b")
+    ask_gemma(replace(VISION_PAGE, text="Glycosylated Haemoglobin (HbA1c) 7.2 % 4.0 - 5.6"), "gemma4:e4b")
     user = fake.calls[0]["messages"][1]
-    assert user["images"] == [b"\x89PNG fake"]
-    assert user["content"].startswith("Page 2 of 2.")
+    assert "images" not in user
+    assert "(HbA1c) 7.2 %" in user["content"]
+
+
+def test_ask_gemma_refuses_a_scan_that_was_not_transcribed(fake_chat):
+    fake_chat()
+    with pytest.raises(ValueError, match="transcribe"):
+        ask_gemma(VISION_PAGE, "gemma4:e4b")
 
 
 def test_retry_uses_slightly_higher_temperature(fake_chat):
