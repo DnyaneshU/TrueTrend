@@ -1,8 +1,7 @@
 import pytest
 
 from app.errors import ExtractError
-from app.gemma import PageExtraction
-from app.pages import PageInput
+from app.models import PageExtraction, PageInput
 from app.pipeline import extract_pages
 
 INVALID = "invalid"

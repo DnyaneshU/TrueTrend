@@ -1,5 +1,4 @@
 import typing
-from dataclasses import replace
 from types import SimpleNamespace
 
 import httpx
@@ -9,8 +8,8 @@ from pydantic import ValidationError
 
 from app import gemma, lab_tests
 from app.errors import ExtractError
-from app.gemma import PageExtraction, ask_gemma, transcribe
-from app.pages import PageInput
+from app.gemma import extract_results, transcribe
+from app.models import PageExtraction, PageInput
 
 VALID_REPLY = (
     '{"patient_name":"Mrs. Sunita Patil","age":"62","sex":"F","lab_name":"SUNRISE DIAGNOSTICS",'
@@ -48,7 +47,7 @@ def fake_chat(monkeypatch):
 
 def test_text_page_is_sent_as_text_with_fixed_settings(fake_chat):
     fake = fake_chat()
-    result = ask_gemma(TEXT_PAGE, "gemma4:e4b")
+    result = extract_results(TEXT_PAGE, "gemma4:e4b")
     assert result.results[0].value_text == "7.2"
     call = fake.calls[0]
     assert call["model"] == "gemma4:e4b"
@@ -80,34 +79,37 @@ def test_transcribe_turns_ollama_problems_into_clear_errors(fake_chat):
 
 def test_scanned_page_is_extracted_from_its_transcription(fake_chat):
     fake = fake_chat()
-    ask_gemma(replace(VISION_PAGE, text="Glycosylated Haemoglobin (HbA1c) 7.2 % 4.0 - 5.6"), "gemma4:e4b")
+    extract_results(
+        VISION_PAGE.model_copy(update={"text": "Glycosylated Haemoglobin (HbA1c) 7.2 % 4.0 - 5.6"}),
+        "gemma4:e4b",
+    )
     user = fake.calls[0]["messages"][1]
     assert "images" not in user
     assert "(HbA1c) 7.2 %" in user["content"]
 
 
-def test_ask_gemma_refuses_a_scan_that_was_not_transcribed(fake_chat):
+def test_extract_results_refuses_a_scan_that_was_not_transcribed(fake_chat):
     fake_chat()
     with pytest.raises(ValueError, match="transcribe"):
-        ask_gemma(VISION_PAGE, "gemma4:e4b")
+        extract_results(VISION_PAGE, "gemma4:e4b")
 
 
 def test_retry_uses_slightly_higher_temperature(fake_chat):
     fake = fake_chat()
-    ask_gemma(TEXT_PAGE, "gemma4:e4b", retry=True)
+    extract_results(TEXT_PAGE, "gemma4:e4b", retry=True)
     assert fake.calls[0]["options"] == {"temperature": 0.3, "num_ctx": 8192, "num_predict": 2048}
 
 
 def test_truncated_reply_raises_validation_error(fake_chat):
     fake_chat(reply='{"patient_name": "Mrs. Sun')
     with pytest.raises(ValidationError):
-        ask_gemma(TEXT_PAGE, "gemma4:e4b")
+        extract_results(TEXT_PAGE, "gemma4:e4b")
 
 
 def test_unknown_test_code_raises_validation_error(fake_chat):
     fake_chat(reply=VALID_REPLY.replace('"HBA1C"', '"T3"'))
     with pytest.raises(ValidationError):
-        ask_gemma(TEXT_PAGE, "gemma4:e4b")
+        extract_results(TEXT_PAGE, "gemma4:e4b")
 
 
 @pytest.mark.parametrize(
@@ -122,7 +124,7 @@ def test_unknown_test_code_raises_validation_error(fake_chat):
 def test_ollama_problems_become_clear_errors(fake_chat, error, message):
     fake_chat(error=error)
     with pytest.raises(ExtractError, match=message):
-        ask_gemma(TEXT_PAGE, "gemma4:e4b")
+        extract_results(TEXT_PAGE, "gemma4:e4b")
 
 
 def test_schema_requires_every_field_and_limits_test_codes():

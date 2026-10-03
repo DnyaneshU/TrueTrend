@@ -2,9 +2,9 @@
 
     python -m app.extract path/to/report.pdf [--force] [--model gemma4:e2b]
 
-Pages are read by app.pages, Gemma is called by app.gemma, and the answers are
-merged by app.pipeline. This module stores the original, saves the report to
-SQLite and prints it as JSON.
+Pages are read by app.pages, Gemma is called by app.gemma, the answers are merged by
+app.pipeline and turned into numbers by app.normalize. This module stores the
+original, saves the report to SQLite and prints it as JSON.
 """
 
 import argparse
@@ -14,18 +14,20 @@ import logging
 import shutil
 import sys
 import time
-from contextlib import closing, suppress
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from app import db
+from app import db, gemma
 from app.config import ROOT, settings
+from app.console import configure_console
 from app.dates import parse_date
 from app.errors import ExtractError
-from app.gemma import ask_gemma, transcribe
-from app.models import Extraction, ReportOutput, SavedResult
+from app.models import Extraction, ReportOutput, ReportRecord, SavedResult
+from app.normalize import normalize
 from app.pages import open_pdf, read_pages
-from app.pipeline import DATE_FIELDS, extract_pages, plural
+from app.pipeline import DATE_FIELDS, extract_pages
+from app.text import plural
 
 logger = logging.getLogger(__name__)
 
@@ -45,55 +47,51 @@ def run(
     to the database until every page has been read.
     """
     model = model or settings.model
-    with open_pdf(pdf_path) as doc, closing(db.connect(db_path)) as conn:
+    with open_pdf(pdf_path) as doc:
         sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
-        existing = db.find_report_id(conn, sha256)
-        if existing is not None and not force:
+        if not force and (existing := _saved_report_id(sha256, db_path)) is not None:
             logger.info(
                 "%s was already extracted as report #%d. Use --force to redo it.", pdf_path.name, existing
             )
             return None
-
         pages = read_pages(doc)
-        logger.info(
-            "Reading %s: %s with %s. The first page also loads the model, so it takes longer.",
-            pdf_path.name, plural(len(pages), "page"), model,
-        )  # fmt: skip
-        started = time.perf_counter()
-        extraction = extract_pages(
-            pages,
-            ask=lambda page, retry: ask_gemma(page, model, retry),
-            transcribe=lambda page: transcribe(page, model),
-        )
-        seconds = round(time.perf_counter() - started, 1)
 
-        header = extraction.header
-        dates = {name: parse_date(getattr(header, name)) for name in DATE_FIELDS}
-        warnings = extraction.warnings + _report_warnings(extraction, dates)
-        stored = _store_original(pdf_path, sha256, originals_dir or settings.originals_dir)
-        report = {
-            "lab_name": header.lab_name,
-            "sample_date": dates["sample_date"],
-            "report_date": dates["report_date"],
-            "source": "upload",
-            "file_path": _repo_relative(stored),
-            "sha256": sha256,
-            "is_scanned": int(any(page.mode == "vision" for page in pages)),
-            "patient_name_raw": header.patient_name,
-            "patient_age_raw": header.age,
-            "patient_sex_raw": header.sex,
-            "extract_model": model,
-            "extract_seconds": seconds,
-            "raw_json": json.dumps(
-                {"pages": [reply.model_dump(mode="json") for reply in extraction.replies]}, ensure_ascii=False
-            ),
-        }
-        results = [SavedResult(**result.model_dump()) for result in extraction.results]
-        rows = [
-            {**result.model_dump(), "raw_value_text": result.value_text, "check_notes": "not verified yet"}
-            for result in results
-        ]
-        report_id = db.save_report(conn, report, rows, replace=force)
+    logger.info(
+        "Reading %s: %s with %s. The first page also loads the model, so it takes longer.",
+        pdf_path.name, plural(len(pages), "page"), model,
+    )  # fmt: skip
+    started = time.perf_counter()
+    extraction = extract_pages(
+        pages,
+        extract=lambda page, retry: gemma.extract_results(page, model, retry),
+        transcribe=lambda page: gemma.transcribe(page, model),
+    )
+    seconds = round(time.perf_counter() - started, 1)
+
+    header = extraction.header
+    dates = {name: parse_date(getattr(header, name)) for name in DATE_FIELDS}
+    warnings = extraction.warnings + _report_warnings(extraction, dates)
+    results = [
+        SavedResult(**result.model_dump(), **normalize(result).model_dump()) for result in extraction.results
+    ]
+    record = ReportRecord(
+        lab_name=header.lab_name,
+        sample_date=dates["sample_date"],
+        report_date=dates["report_date"],
+        file_path=_repo_relative(_store_original(pdf_path, sha256, originals_dir or settings.originals_dir)),
+        sha256=sha256,
+        is_scanned=any(page.mode == "vision" for page in pages),
+        patient_name_raw=header.patient_name,
+        patient_age_raw=header.age,
+        patient_sex_raw=header.sex,
+        extract_model=model,
+        extract_seconds=seconds,
+        raw_json=json.dumps(
+            {"pages": [reply.model_dump(mode="json") for reply in extraction.replies]}, ensure_ascii=False
+        ),
+    )
+    with closing(db.connect(db_path)) as conn:
+        report_id = db.save_report(conn, record, results, replace=force)
 
     for warning in warnings:
         logger.warning(warning)
@@ -116,6 +114,11 @@ def run(
         warnings=warnings,
         results=results,
     )
+
+
+def _saved_report_id(sha256: str, db_path: Path | None) -> int | None:
+    with closing(db.connect(db_path)) as conn:
+        return db.find_report_id(conn, sha256)
 
 
 def _report_warnings(extraction: Extraction, dates: dict[str, str | None]) -> list[str]:
@@ -154,28 +157,8 @@ def _repo_relative(path: Path) -> str:
         return str(path.resolve())
 
 
-class _ConsoleFormatter(logging.Formatter):
-    """Progress lines as they are; warnings and errors prefixed 'warning:' / 'error:'."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        message = record.getMessage()
-        return message if record.levelno < logging.WARNING else f"{record.levelname.lower()}: {message}"
-
-
-def _configure_console() -> None:
-    """UTF-8 output (Marathi names, µIU/mL survive a Windows code page) and logging to stderr."""
-    for stream in (sys.stdout, sys.stderr):
-        with suppress(AttributeError, ValueError):  # not a real console, e.g. under pytest
-            stream.reconfigure(encoding="utf-8")
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(_ConsoleFormatter())
-    app_logger = logging.getLogger("app")
-    app_logger.handlers = [handler]
-    app_logger.setLevel(logging.INFO)
-
-
 def main(argv: list[str] | None = None) -> int:
-    _configure_console()
+    configure_console()
     parser = argparse.ArgumentParser(
         prog="python -m app.extract",
         description="Extract the MVP lab tests from a lab report PDF with local Gemma, "

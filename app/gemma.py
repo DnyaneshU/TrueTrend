@@ -11,33 +11,11 @@ from string import Template
 
 import httpx
 import ollama
-from pydantic import BaseModel
 
 from app.config import settings
 from app.errors import ExtractError
-from app.lab_tests import CATALOG, TestCode
-from app.pages import PageInput
-
-
-class ExtractedResult(BaseModel):
-    test_code: TestCode
-    raw_name: str
-    value_text: str
-    unit: str | None
-    ref_text: str | None
-
-
-# What Gemma returns for one page; every key is required, values may be null.
-# (No docstring: Pydantic would put it into the schema sent to Gemma.)
-class PageExtraction(BaseModel):
-    patient_name: str | None
-    age: str | None
-    sex: str | None
-    lab_name: str | None
-    sample_date: str | None
-    report_date: str | None
-    results: list[ExtractedResult]
-
+from app.lab_tests import CATALOG
+from app.models import PageExtraction, PageInput
 
 PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
 
@@ -63,7 +41,7 @@ def transcribe(page: PageInput, model: str) -> str:
     return response.message.content
 
 
-def ask_gemma(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
+def extract_results(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
     """Gemma picks the MVP tests out of one page's text (a scan's transcription for vision pages).
 
     Raises pydantic.ValidationError if the reply does not fit the schema, and

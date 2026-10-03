@@ -9,6 +9,16 @@
 #   prompt     how the prompt describes the test to Gemma
 #   names      a printed test name must contain one of these words or phrases...
 #   not_names  ...and none of these: look-alike tests labs print nearby
+#   unit       the standard unit results are converted to
+#   units      each unit a lab may print -> how to convert it to the standard unit:
+#              a number to multiply by, or { divide = n } / { multiply = n, offset = n }.
+#              Units are compared case- and spacing-insensitively, with µ, u and
+#              "micro" treated alike ("µIU/mL" = "uIU/ml" = "microIU/mL").
+#
+# Conversion factors: glucose x 18.016, cholesterol x 38.67, triglycerides x 88.57,
+# creatinine / 88.4, 25-OH vitamin D / 2.496 and HbA1c IFCC -> NGSP (0.0915 x + 2.15)
+# are from the project brief; the others follow from molar masses: free T4 (776.9 g/mol)
+# x 0.0777, urea (60.06) x 6.006, uric acid (168.1) / 59.48, vitamin B12 (1355.4) x 1.355.
 #
 # Names are compared after normalising spelling: case is ignored, punctuation becomes
 # a space, dotted abbreviations are joined ("T.S.H." = "TSH"), and letters are split
@@ -26,6 +36,10 @@ prompt_exclusions = [
 flags = ["HH", "LL", "H", "L"]
 # What Gemma sometimes writes instead of leaving a field empty.
 empty_words = ["null", "none", "n/a", "-"]
+# A reference range is read only when it has no label or one of these; other labels
+# ("Low: <40", "Deficiency: <10") are risk categories, not the normal range.
+normal_range_labels = ["normal", "desirable", "optimal", "reference", "ref", "reference range",
+                       "biological reference interval", "bio ref interval", "adult", "adults"]
 
 [[tests]]
 code = "HBA1C"
@@ -33,6 +47,8 @@ name = "HbA1c"
 prompt = "HbA1c, Glycated / Glycosylated Haemoglobin"
 names = ["HbA1c", "A1c", "glycated", "glycosylated", "glycohaemoglobin", "glycohemoglobin"]
 not_names = []
+unit = "%"
+units = { "%" = 1, "mmol/mol" = { multiply = 0.0915, offset = 2.15 } }
 
 [[tests]]
 code = "GLU_F"
@@ -41,6 +57,8 @@ prompt = "Fasting blood or plasma glucose, FBS, Fasting Blood Sugar"
 names = ["fasting", "FBS", "FBG", "FPG", "F"]
 not_names = ["estimated", "average", "mean", "random", "RBS", "post", "prandial", "postprandial",
              "PP", "PPBS", "urine", "urinary"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 18.016 }
 
 [[tests]]
 code = "GLU_PP"
@@ -49,6 +67,8 @@ prompt = "Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose"
 names = ["post", "prandial", "postprandial", "PP", "PPBS", "PPBG", "2 hr", "2 hrs", "2 hour",
          "2 hours", "two hour", "two hours"]
 not_names = ["estimated", "average", "mean", "random", "RBS", "fasting", "urine", "urinary"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 18.016 }
 
 [[tests]]
 code = "TSH"
@@ -56,6 +76,9 @@ name = "TSH"
 prompt = "TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)"
 names = ["TSH", "thyroid stimulating"]
 not_names = ["T3", "T4", "FT3", "FT4"]
+unit = "µIU/mL"
+# "mlU/L" is how some lab fonts print mIU/L
+units = { "µIU/mL" = 1, "mIU/L" = 1, "mlU/L" = 1 }
 
 [[tests]]
 code = "FT4"
@@ -63,6 +86,8 @@ name = "Free T4"
 prompt = "Free T4, FT4, Free Thyroxine"
 names = ["free", "FT4"]
 not_names = ["total", "T3", "FT3", "TSH"]
+unit = "ng/dL"
+units = { "ng/dL" = 1, "pmol/L" = 0.0777 }
 
 [[tests]]
 code = "CHOL"
@@ -70,6 +95,8 @@ name = "Total cholesterol"
 prompt = "Total Cholesterol"
 names = ["cholesterol", "chol", "TC"]
 not_names = ["HDL", "LDL", "VLDL", "density", "lipoprotein", "non", "ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 
 [[tests]]
 code = "LDL"
@@ -77,6 +104,8 @@ name = "LDL cholesterol"
 prompt = "LDL Cholesterol (direct or calculated)"
 names = ["LDL", "low density"]
 not_names = ["VLDL", "very", "HDL", "high density", "non", "ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 
 [[tests]]
 code = "HDL"
@@ -84,6 +113,8 @@ name = "HDL cholesterol"
 prompt = "HDL Cholesterol"
 names = ["HDL", "high density"]
 not_names = ["LDL", "VLDL", "low density", "non", "ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 
 [[tests]]
 code = "TG"
@@ -91,6 +122,8 @@ name = "Triglycerides"
 prompt = "Triglycerides"
 names = ["triglyceride", "triglycerides", "TG", "trig", "trigs"]
 not_names = ["ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 88.57 }
 
 [[tests]]
 code = "CREAT"
@@ -98,6 +131,8 @@ name = "Creatinine"
 prompt = "Serum Creatinine"
 names = ["creatinine", "creat"]
 not_names = ["urine", "urinary", "clearance", "ratio", "eGFR", "GFR", "creatine", "kinase", "CK", "CPK"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "µmol/L" = { divide = 88.4 } }
 
 [[tests]]
 code = "HB"
@@ -107,6 +142,8 @@ names = ["haemoglobin", "hemoglobin", "Hb", "Hgb"]
 # HbA1c and glycated Hb; the blood-count indices MCH and MCHC; electrophoresis fractions
 not_names = ["A1c", "HbA1c", "glycated", "glycosylated", "corpuscular", "MCH", "MCHC", "urine",
              "HbA", "Hb A", "Hb F", "HbF", "Hb S", "HbS", "foetal", "fetal", "electrophoresis", "HPLC"]
+unit = "g/dL"
+units = { "g/dL" = 1, "gm/dL" = 1, "g/L" = { divide = 10 } }
 
 [[tests]]
 code = "VITD"
@@ -114,6 +151,8 @@ name = "Vitamin D (25-OH)"
 prompt = "25-Hydroxy (25-OH) Vitamin D, Vitamin D Total"
 names = ["vitamin D", "vit D", "cholecalciferol", "25 OH", "25 hydroxy", "25 hydroxyvitamin"]
 not_names = ["1,25", "dihydroxy"]
+unit = "ng/mL"
+units = { "ng/mL" = 1, "nmol/L" = { divide = 2.496 } }
 
 [[tests]]
 code = "B12"
@@ -121,6 +160,8 @@ name = "Vitamin B12"
 prompt = "Vitamin B12, Cyanocobalamin"
 names = ["B12", "cobalamin", "cyanocobalamin", "methylcobalamin"]
 not_names = []
+unit = "pg/mL"
+units = { "pg/mL" = 1, "pmol/L" = 1.355 }
 
 [[tests]]
 code = "URIC"
@@ -128,6 +169,8 @@ name = "Uric acid"
 prompt = "Uric Acid"
 names = ["uric"]
 not_names = ["urine", "urinary", "ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "µmol/L" = { divide = 59.48 } }
 
 [[tests]]
 code = "UREA"
@@ -135,3 +178,5 @@ name = "Urea"
 prompt = "Urea, Blood Urea, Serum Urea"
 names = ["urea"]
 not_names = ["nitrogen", "BUN", "urine", "urinary", "ratio"]
+unit = "mg/dL"
+units = { "mg/dL" = 1, "mmol/L" = 6.006 }

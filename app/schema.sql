@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS results (
     test_code       TEXT,
     raw_name        TEXT NOT NULL,
     raw_value_text  TEXT NOT NULL,
-    value           REAL,
+    value           REAL,                 -- the printed number, in the printed unit
+    qualifier       TEXT,                 -- '<' when the lab printed '< 148'
     unit            TEXT,
     value_std       REAL,
     unit_std        TEXT,
