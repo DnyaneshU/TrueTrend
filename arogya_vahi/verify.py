@@ -3,12 +3,18 @@
 A result is `verified` only when all of these hold; otherwise it stays `needs_check`
 with notes saying why:
 
-- Its value is printed on its page as a cell of its own, in a row whose label names
-  its test (by the catalog's names and look-alikes). The PDF's own text is used, never
-  Gemma's reading of it, so a value on a scanned page always needs a check.
+- Its value is printed on its page with the same qualifier ("< 148"), followed in its
+  cell by nothing but its unit or a high/low mark, in a row whose label names its test
+  (by the catalog's names and look-alikes); and its unit is printed in that row. The
+  PDF's own text is used, never Gemma's reading of it, so a value on a scanned page
+  always needs a check.
 - Normalisation turned it into a number in a known unit, within the test's believable
-  limits (data/lab_tests.toml).
+  limits (arogya_vahi/data/lab_tests.toml).
 - It is not more than a total it is part of (LDL and HDL are parts of total cholesterol).
+
+The lab's normal range is checked separately: `ref_verified` is true only when every
+limit read from it is printed in the value's own row, apart from the value itself.
+Only a verified range is used to say a result is outside it.
 
 Two cross-checks only add a note and never change the status: the lab's LDL against
 the Friedewald estimate, and HbA1c's average glucose (ADAG) against fasting glucose.
@@ -21,15 +27,12 @@ from dataclasses import dataclass, field
 
 import pymupdf
 
-from app.config import settings
-from app.lab_tests import CATALOG, LabTest
-from app.models import Result, SavedResult
-from app.normalize import normalize
-from app.pages import Cell, looks_scanned, page_rows, page_text
-from app.text import NUMBER, QUALIFIER, to_float
-
-# A word that is one value: "7.2", "<148", "7.2%", "13.6*"; not a range, nor a name like "B12".
-_VALUE_CELL = re.compile(rf"^(?:{QUALIFIER})?(?P<number>{NUMBER})[%*]?$")
+from arogya_vahi.config import settings
+from arogya_vahi.lab_tests import CATALOG, LabTest, normalize_unit
+from arogya_vahi.models import Normalized, Result, SavedResult
+from arogya_vahi.normalize import normalize, parse_range
+from arogya_vahi.pages import Cell, Row, Word, looks_scanned, page_rows, rows_text
+from arogya_vahi.text import NUMBER, QUALIFIERS, printed_number, to_float
 
 BBox = tuple[float, float, float, float]
 
@@ -41,6 +44,7 @@ class _Check:
     problems: list[str] = field(default_factory=list)  # each keeps the result at needs_check
     notes: list[str] = field(default_factory=list)  # for information only
     bbox: BBox | None = None
+    ref_verified: bool = False
 
     @property
     def amount(self) -> float | None:
@@ -52,12 +56,34 @@ class _Check:
         return f"{self.result.value_std:g} {self.result.unit_std}"
 
 
+@dataclass(frozen=True)
+class _Printed:
+    """Where a value is printed: the word, and the row it is in."""
+
+    word: Word
+    row: Row
+
+
+class _PdfText:
+    """The report PDF's text layer, each page read into rows once."""
+
+    def __init__(self, doc: pymupdf.Document | None) -> None:
+        self.doc = doc
+        self._rows: dict[int, list[Row]] = {}
+
+    def rows(self, page: int) -> list[Row]:
+        if page not in self._rows:
+            self._rows[page] = page_rows(self.doc[page - 1])
+        return self._rows[page]
+
+
 def verify_results(results: Sequence[Result], doc: pymupdf.Document | None) -> list[SavedResult]:
     """Normalise one report's results and check them against its PDF.
 
     doc is the report's original PDF, or None when it could not be opened.
     """
-    checks = [_check(result, doc) for result in results]
+    pdf = _PdfText(doc)
+    checks = [_check(result, pdf) for result in results]
     _check_parts(checks)
     _check_friedewald(checks)
     _check_adag(checks)
@@ -67,62 +93,111 @@ def verify_results(results: Sequence[Result], doc: pymupdf.Document | None) -> l
                 "status": "needs_check" if check.problems else "verified",
                 "notes": check.problems + check.notes,
                 "bbox": check.bbox,
+                "ref_verified": check.ref_verified,
             }
         )
         for check in checks
     ]
 
 
-def printed_number(text: str) -> float | None:
-    """The number in a printed word that is one value ("7.2", "<148", "७.२", "7.2%"), else None."""
-    match = _VALUE_CELL.match(text)
-    return to_float(match["number"]) if match else None
-
-
-def _check(result: Result, doc: pymupdf.Document | None) -> _Check:
-    normalized = normalize(result)
+def _check(result: Result, pdf: _PdfText) -> _Check:
+    test = CATALOG.test(result.test_code)
+    normalized = normalize(result, test)
     check = _Check(
         result=SavedResult(**result.model_dump(), **normalized.model_dump()),
-        test=CATALOG.test(result.test_code),
+        test=test,
         problems=list(normalized.notes),
     )
     if normalized.value is not None:
-        check.bbox, problem = _find_on_page(doc, result, normalized.value, check.test)
-        if problem:
-            check.problems.append(problem)
-    low, high = check.test.plausible
+        printed = _find_on_page(pdf, result, normalized, test)
+        if isinstance(printed, str):
+            check.problems.append(printed)
+        else:
+            check.bbox = printed.word.bbox
+            check.ref_verified = _range_printed(printed, result.ref_text)
+            if result.unit and not _unit_printed(printed.row, result.unit):
+                check.problems.append(f"unit {result.unit!r} is not printed in the value's row")
+    low, high = test.plausible
     if check.amount is not None and not low <= check.amount <= high:
         check.problems.append(
-            f"{check} is outside the believable limits for {check.test.name} "
-            f"({low:g}–{high:g} {check.test.unit}); probably misread"
+            f"{check} is outside the believable limits for {test.name} "
+            f"({low:g}–{high:g} {test.unit}); probably misread"
         )
     return check
 
 
-def _find_on_page(
-    doc: pymupdf.Document | None, result: Result, value: float, test: LabTest
-) -> tuple[BBox | None, str | None]:
-    """Where the value is printed in a row of its test, or why it can't be found."""
-    if doc is None:
-        return None, "the original PDF could not be opened, so the value was not checked against it"
-    if not 1 <= result.page <= doc.page_count:
-        return None, f"page {result.page} is not in the PDF"
-    page = doc[result.page - 1]
-    for row in page_rows(page):
+def _find_on_page(pdf: _PdfText, result: Result, normalized: Normalized, test: LabTest) -> _Printed | str:
+    """Where the value is printed, with its qualifier, in a row naming its test; or why it isn't."""
+    if pdf.doc is None:
+        return "the original PDF could not be opened, so the value was not checked against it"
+    if not 1 <= result.page <= pdf.doc.page_count:
+        return f"page {result.page} is not in the PDF"
+    rows = pdf.rows(result.page)
+    for row in rows:
         for cell_index, cell in enumerate(row):
             for word_index, word in enumerate(cell):
-                number = printed_number(word.text)
-                if number is None or not math.isclose(number, value):
+                if not (
+                    _reads_as(cell, word_index, normalized)
+                    and _ends_its_cell(cell[word_index + 1 :], result.unit)
+                ):
                     continue
                 label = _label(row[:cell_index], cell[:word_index])
-                if 0 < len(label.split()) <= settings.max_label_words and test.is_named_by(label):
-                    return word.bbox, None
-    if looks_scanned(page, page_text(page)):
-        return None, (
+                if len(label.split()) <= settings.max_label_words and test.is_named_by(label):
+                    return _Printed(word, row)
+    if looks_scanned(pdf.doc[result.page - 1], rows_text(rows)):
+        return (
             f"page {result.page} is scanned, so the value can't be checked against the PDF's text; "
             "compare it with the original"
         )
-    return None, f"{result.value_text} is not printed on page {result.page} in a row naming {test.name}"
+    return f"{result.value_text} is not printed on page {result.page} in a row naming {test.name}"
+
+
+def _reads_as(cell: Cell, index: int, normalized: Normalized) -> bool:
+    """True when the word at `index` is the value with the same qualifier ("<148" or "<" "148")."""
+    printed = printed_number(cell[index].text)
+    if printed is None or not math.isclose(printed[1], normalized.value):
+        return False
+    qualifier = printed[0]
+    if qualifier is None and index > 0:  # the qualifier printed as a word of its own
+        qualifier = QUALIFIERS.get(cell[index - 1].text)
+    return qualifier == normalized.qualifier
+
+
+def _ends_its_cell(words_after: Cell, unit: str | None) -> bool:
+    """True when nothing but the unit or a high/low mark follows the value in its cell.
+
+    "7.2 %" and "18.0 L" are values; "6.5 Diabetes" is a sentence that mentions a number.
+    """
+    unit_key = normalize_unit(unit) if unit else None
+    flags = set(CATALOG.report.flags)
+    return all(
+        word.text in flags
+        or normalize_unit(word.text) == unit_key
+        or not any(char.isalpha() for char in word.text)
+        for word in words_after
+    )
+
+
+def _unit_printed(row: Row, unit: str) -> bool:
+    """True when the unit is printed in the row: as a cell, a word, or after the value ("7.2%")."""
+    wanted = normalize_unit(unit)
+    texts = [" ".join(word.text for word in cell) for cell in row]
+    texts += [word.text for cell in row for word in cell]
+    texts += [re.sub(rf"^[<>=≤≥]*(?:{NUMBER})", "", text) for text in texts]
+    return any(normalize_unit(text) == wanted for text in texts)
+
+
+def _range_printed(printed: _Printed, ref_text: str | None) -> bool:
+    """True when the normal range reads as limits, each printed in the value's row (not as the value)."""
+    limits = [limit for limit in parse_range(ref_text) or () if limit is not None]
+    numbers = [
+        to_float(number)
+        for cell in printed.row
+        for word in cell
+        if word is not printed.word
+        for number in re.findall(NUMBER, word.text)
+    ]
+    return bool(limits) and all(any(math.isclose(limit, number) for number in numbers) for limit in limits)
 
 
 def _label(cells_left: list[Cell], words_before: Cell) -> str:

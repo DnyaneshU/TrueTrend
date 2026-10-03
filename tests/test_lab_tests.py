@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.lab_tests import CATALOG, TestCode
+from arogya_vahi.lab_tests import CATALOG, TestCode
 
 # Names as Indian lab reports print them; each must be accepted for its code.
 MATCHING = [
@@ -61,7 +61,7 @@ MATCHING = [
     ("UREA", "Serum Urea"),
 ]
 
-# A different test given an MVP code. The first two are what Gemma vision really did.
+# A different test given a supported code. The first two are what Gemma vision really did.
 CONFLICTING = [
     ("GLU_F", "Estimated Average Glucose"),
     ("FT4", "Total T4"),
@@ -139,7 +139,16 @@ def test_every_catalog_name_matches_in_any_capitalisation(data):
     assert test.conflict(printed) is None, (test.code, printed)
 
 
-def test_catalog_has_the_15_mvp_tests_once_each():
+def test_each_test_is_in_the_catalog_once_and_in_the_schema():
     codes = [test.code for test in CATALOG.tests]
-    assert len(codes) == len(set(codes)) == 15
+    assert len(codes) == len(set(codes))
     assert set(typing.get_args(TestCode)) == set(codes)
+
+
+def test_every_variation_constant_cites_its_source():
+    for test in CATALOG.tests:
+        if test.variation is None:
+            continue
+        assert "biologicalvariation.eu" in test.variation.source, test.code  # CVI from the EFLM database
+        if test.variation.between_lab_cv is not None:
+            assert "Between-lab CV:" in test.variation.source, test.code

@@ -1,12 +1,54 @@
-"""Shared test helpers. Tests only ever use synthetic PDFs, never real reports."""
+"""Shared fixtures. Tests only ever use synthetic PDFs, never real reports."""
+
+import os
+from contextlib import closing
 
 import pymupdf
 import pytest
+from hypothesis import settings as hypothesis_settings
+
+from arogya_vahi import db, gemma
+from arogya_vahi.config import Settings, settings
+
+# CI runs the property tests reproducibly: HYPOTHESIS_PROFILE=ci pytest
+hypothesis_settings.register_profile("ci", derandomize=True, print_blob=True)
+hypothesis_settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
+
+
+@pytest.fixture(autouse=True)
+def storage(tmp_path, monkeypatch):
+    """Every test runs with the default settings and its own empty storage folder.
+
+    Nothing from AROGYA_* variables or a .env file applies, and the real storage/ is
+    never touched.
+    """
+    defaults = Settings.model_construct()
+    for name in Settings.model_fields:
+        monkeypatch.setattr(settings, name, getattr(defaults, name))
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
+    return settings.storage_dir
+
+
+@pytest.fixture(autouse=True)
+def no_real_ollama(request, monkeypatch):
+    """Only tests marked `live` may call the real Ollama; anything else that tries, fails."""
+    if request.node.get_closest_marker("live") is None:
+
+        def refuse():
+            raise AssertionError("this test called the real Ollama; patch gemma or mark it live")
+
+        monkeypatch.setattr(gemma, "_client", refuse)
+
+
+@pytest.fixture
+def conn(storage):
+    with closing(db.connect()) as connection:
+        yield connection
 
 
 @pytest.fixture
 def report_page():
-    """One synthetic lab report page as (x, y, text): 2 MVP tests and 1 look-alike."""
+    """One synthetic lab report page as (x, y, text): 2 supported tests and 1 look-alike."""
     return [
         (50, 60, "SUNRISE DIAGNOSTICS"),
         (50, 80, "Patient Name : Mrs. Sunita Patil"),
@@ -38,18 +80,36 @@ def make_pdf(tmp_path):
     def _make(pages, name="report.pdf", password=None):
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        doc = pymupdf.open()
-        for items in pages:
-            page = doc.new_page()
-            for x, y, text in items:
-                page.insert_text((x, y), text, fontsize=10)
-        if password:
-            doc.save(
-                path, encryption=pymupdf.PDF_ENCRYPT_AES_256, user_pw=password, owner_pw=password + "-owner"
-            )
-        else:
-            doc.save(path)
-        doc.close()
+        with pymupdf.open() as doc:
+            for items in pages:
+                page = doc.new_page()
+                for x, y, text in items:
+                    page.insert_text((x, y), text, fontsize=10)
+            if password:
+                doc.save(
+                    path,
+                    encryption=pymupdf.PDF_ENCRYPT_AES_256,
+                    user_pw=password,
+                    owner_pw=password + "-owner",
+                )
+            else:
+                doc.save(path)
+        return path
+
+    return _make
+
+
+@pytest.fixture
+def make_scan_pdf(make_pdf, tmp_path):
+    """Build a PDF whose one page is a picture of a synthetic page, with no text layer."""
+
+    def _make(items, name="scan.pdf"):
+        with pymupdf.open(make_pdf([items], name="digital.pdf")) as digital:
+            png = digital[0].get_pixmap(dpi=150).tobytes("png")
+        path = tmp_path / name
+        with pymupdf.open() as scan:
+            scan.new_page().insert_image(scan[0].rect, stream=png)
+            scan.save(path)
         return path
 
     return _make

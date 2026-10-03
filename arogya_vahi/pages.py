@@ -7,9 +7,9 @@ from typing import NamedTuple
 
 import pymupdf
 
-from app.config import settings
-from app.errors import ExtractError
-from app.models import PageInput
+from arogya_vahi.config import settings
+from arogya_vahi.errors import UserError
+from arogya_vahi.models import PageInput
 
 # Extract words with ligatures expanded, so "Proﬁle" comes out as "Profile".
 WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES
@@ -34,14 +34,17 @@ class Word(NamedTuple):
         return round(self.x0, 1), round(self.y0, 1), round(self.x1, 1), round(self.y1, 1)
 
 
-def open_pdf(path: Path) -> pymupdf.Document:
-    """Open a report PDF, or raise ExtractError saying in one sentence why not."""
-    if not path.is_file():
-        raise ExtractError(f"File not found: {path}")
+def open_pdf(path: Path, data: bytes | None = None) -> pymupdf.Document:
+    """Open a report PDF, or raise UserError saying in one sentence why not.
+
+    With `data`, the PDF is opened from those bytes (already read from `path`).
+    """
+    if data is None and not path.is_file():
+        raise UserError(f"File not found: {path}")
     try:
-        doc = pymupdf.open(path)
+        doc = pymupdf.open(path) if data is None else pymupdf.open(stream=data)
     except RuntimeError:  # pymupdf.FileDataError and friends
-        raise ExtractError(f"Not a readable PDF: {path}") from None
+        raise UserError(f"Not a readable PDF: {path}") from None
     if not doc.is_pdf:
         problem = f"Not a PDF: {path}"
     elif doc.needs_pass:
@@ -54,7 +57,7 @@ def open_pdf(path: Path) -> pymupdf.Document:
     else:
         return doc
     doc.close()
-    raise ExtractError(problem)
+    raise UserError(problem)
 
 
 def read_pages(doc: pymupdf.Document) -> list[PageInput]:
@@ -80,15 +83,19 @@ def page_text(page: pymupdf.Page) -> str:
 
     Cells are separated by " | ", so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
-    return "\n".join(
-        " | ".join(" ".join(word.text for word in cell) for cell in row) for row in page_rows(page)
-    )
+    return rows_text(page_rows(page))
 
 
 Cell = list[Word]
+Row = list[Cell]
 
 
-def page_rows(page: pymupdf.Page) -> list[list[Cell]]:
+def rows_text(rows: list[Row]) -> str:
+    """Rows as text: one line per row, cells separated by " | "."""
+    return "\n".join(" | ".join(" ".join(word.text for word in cell) for cell in row) for row in rows)
+
+
+def page_rows(page: pymupdf.Page) -> list[Row]:
     """The page's printed lines, top to bottom, each split into cells read left to right.
 
     Words whose vertical centres are within half a text height form one line, and a
@@ -109,7 +116,7 @@ def page_rows(page: pymupdf.Page) -> list[list[Cell]]:
     return [_cells(sorted(line), settings.column_gap * height) for line in lines]
 
 
-def _cells(line: list[Word], column_gap: float) -> list[Cell]:
+def _cells(line: list[Word], column_gap: float) -> Row:
     cells = [[line[0]]]
     for previous, word in pairwise(line):
         if word.x0 - previous.x1 > column_gap:

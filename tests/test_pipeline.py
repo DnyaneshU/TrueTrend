@@ -1,8 +1,8 @@
 import pytest
 
-from app.errors import ExtractError
-from app.models import PageExtraction, PageInput
-from app.pipeline import extract_pages
+from arogya_vahi.errors import UserError
+from arogya_vahi.models import PageExtraction, PageInput
+from arogya_vahi.pipeline import extract_pages
 
 INVALID = "invalid"
 
@@ -140,7 +140,7 @@ def test_page_failing_twice_is_skipped_with_warning():
 
 def test_every_page_failing_is_fatal():
     ask = ScriptedAsk({1: [INVALID, INVALID], 2: [INVALID, INVALID]})
-    with pytest.raises(ExtractError, match="every page"):
+    with pytest.raises(UserError, match="could not read any page"):
         extract_pages(pages(2), ask, no_transcribe)
 
 
@@ -270,6 +270,15 @@ def test_replies_are_kept_for_raw_json():
 
 
 def test_progress_is_logged(caplog):
-    caplog.set_level("INFO", logger="app")
+    caplog.set_level("INFO", logger="arogya_vahi")
     extract_pages(pages(1), ScriptedAsk({1: [reply([row()])]}), no_transcribe)
     assert "page 1/1 · text · 1 result ·" in caplog.text
+
+
+def test_a_scan_gemma_reads_no_text_off_is_a_failed_page():
+    scan = PageInput(number=1, total=2, mode="vision", image=b"png")
+    ask = ScriptedAsk({2: [reply([row()])]})
+    out = extract_pages([scan, *pages(2)[1:]], ask, lambda page: "  \n ")
+    assert [summary.mode for summary in out.pages] == ["failed", "text"]
+    assert ask.calls == [(2, False)]  # the empty page is not sent to the extraction step
+    assert "page 1: Gemma read no text off the scan; page skipped" in out.warnings

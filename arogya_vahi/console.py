@@ -6,8 +6,8 @@ from contextlib import suppress
 
 _HANDLER_NAME = "arogya-console"
 # Our progress lines are shown; other libraries (httpx logs every request) only when they warn.
-# "__main__" is the name a module gets when run as `python -m app.<module>`.
-_INFO_LOGGERS = ("app", "__main__")
+# "__main__" is the name a module gets when run as `python -m arogya_vahi.<module>`.
+_INFO_LOGGERS = ("arogya_vahi", "__main__")
 
 
 class _ConsoleFormatter(logging.Formatter):
