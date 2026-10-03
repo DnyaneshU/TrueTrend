@@ -37,6 +37,7 @@ app = ["prompts/*.txt", "schema.sql"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"   # list skipped tests with their reason (e.g. the live Gemma test)
+filterwarnings = ["error"]   # a new warning fails the suite instead of scrolling past
 
 [tool.ruff]
 line-length = 110

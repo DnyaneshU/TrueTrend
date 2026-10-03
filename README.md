@@ -71,7 +71,9 @@ Changing the catalog or prompts needs no code changes.
 | `app/normalize.py` | Values, units and normal ranges as numbers in standard units |
 | `app/pipeline.py` | Merges the pages' answers into one report |
 | `app/extract.py` | The command: stores the original, saves to SQLite, prints JSON |
-| `app/models.py`, `app/db.py`, `app/schema.sql`, `app/config.py` | Data models, storage, settings |
+| `app/models.py` | The data passed between steps, saved, and printed (Pydantic models) |
+| `app/db.py`, `app/schema.sql` | SQLite storage |
+| `app/config.py`, `app/text.py`, `app/console.py`, `app/errors.py` | Settings, shared text helpers, console output, user-facing errors |
 
 ## Tests
 

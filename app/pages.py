@@ -1,27 +1,30 @@
 """Turn a report PDF into pages Gemma can read: rebuilt text, or an image for scans."""
 
 import statistics
-from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import Literal
+from typing import NamedTuple
 
 import pymupdf
 
 from app.config import settings
 from app.errors import ExtractError
+from app.models import PageInput
 
 # Extract words with ligatures expanded, so "Proﬁle" comes out as "Profile".
 WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES
 
 
-@dataclass(frozen=True)
-class PageInput:
-    number: int  # 1-based, assigned by code
-    total: int
-    mode: Literal["text", "vision"]
-    text: str = ""
-    image: bytes | None = None  # PNG, vision pages only
+class _Word(NamedTuple):
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    text: str
+
+    @property
+    def centre(self) -> float:
+        return (self.y0 + self.y1) / 2
 
 
 def open_pdf(path: Path) -> pymupdf.Document:
@@ -53,9 +56,9 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
     for number, page in enumerate(doc, start=1):
         text = page_text(page)
         if _looks_scanned(page, text):
-            pages.append(PageInput(number, doc.page_count, "vision", image=_render(page)))
+            pages.append(PageInput(number=number, total=doc.page_count, mode="vision", image=_render(page)))
         else:
-            pages.append(PageInput(number, doc.page_count, "text", text=text))
+            pages.append(PageInput(number=number, total=doc.page_count, mode="text", text=text))
     return pages
 
 
@@ -72,32 +75,27 @@ def page_text(page: pymupdf.Page) -> str:
     read left to right. A gap wider than settings.column_gap × text height becomes " | ",
     so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
-    words = [word[:5] for word in page.get_text("words", flags=WORD_FLAGS)]  # (x0, y0, x1, y1, text)
+    words = [_Word(*word[:5]) for word in page.get_text("words", flags=WORD_FLAGS)]
     if not words:
         return ""
-    height = statistics.median(y1 - y0 for _, y0, _, y1, _ in words) or 1.0
-    lines: list[list[tuple]] = []
+    height = statistics.median(word.y1 - word.y0 for word in words) or 1.0
+    lines: list[list[_Word]] = []
     line_centre = 0.0
-    for word in sorted(words, key=lambda w: (_centre(w), w[0])):
-        if lines and _centre(word) - line_centre <= height / 2:
+    for word in sorted(words, key=lambda word: (word.centre, word.x0)):
+        if lines and word.centre - line_centre <= height / 2:
             lines[-1].append(word)
         else:
             lines.append([word])
-            line_centre = _centre(word)
+            line_centre = word.centre
     return "\n".join(_join_line(sorted(line), height) for line in lines)
 
 
-def _centre(word: tuple) -> float:
-    _, y0, _, y1, _ = word
-    return (y0 + y1) / 2
-
-
-def _join_line(words: list[tuple], height: float) -> str:
+def _join_line(words: list[_Word], height: float) -> str:
     """One line's words, left to right, with " | " wherever the gap is a column break."""
-    parts = [words[0][4]]
-    for (_, _, previous_x1, _, _), (x0, _, _, _, text) in pairwise(words):
-        parts.append(" | " if x0 - previous_x1 > settings.column_gap * height else " ")
-        parts.append(text)
+    parts = [words[0].text]
+    for previous, word in pairwise(words):
+        parts.append(" | " if word.x0 - previous.x1 > settings.column_gap * height else " ")
+        parts.append(word.text)
     return "".join(parts)
 
 

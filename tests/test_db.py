@@ -4,31 +4,25 @@ from contextlib import closing
 import pytest
 
 from app import db
+from app.models import ReportRecord, SavedResult
 from app.normalize import renormalize
 
 
 def make_report(sha256="abc123", **overrides):
-    report = dict.fromkeys(db.REPORT_COLUMNS)
-    report.update(source="upload", file_path="storage/originals/abc123.pdf", sha256=sha256, is_scanned=0)
-    report.update(overrides)
-    return report
+    # model_construct skips validation, so the database's own CHECK constraints are tested too
+    fields = {
+        "lab_name": None, "sample_date": None, "report_date": None, "source": "upload",
+        "file_path": "storage/originals/abc123.pdf", "sha256": sha256, "is_scanned": False,
+        "patient_name_raw": None, "patient_age_raw": None, "patient_sex_raw": None,
+        "extract_model": "gemma4:e4b", "extract_seconds": 1.0, "raw_json": "{}",
+    }  # fmt: skip
+    return ReportRecord.model_construct(**{**fields, **overrides})
 
 
 def make_result(**overrides):
-    result = {
-        "test_code": "HBA1C",
-        "raw_name": "HbA1c",
-        "raw_value_text": "7.2",
-        "unit": "%",
-        "ref_text": "4.0 - 5.6",
-        "flag": None,
-        "page": 1,
-        "status": "needs_check",
-        "check_notes": "not verified yet",
-        **dict.fromkeys(["value", "qualifier", "value_std", "unit_std", "ref_low", "ref_high"]),
-    }
-    result.update(overrides)
-    return result
+    fields = {"page": 1, "test_code": "HBA1C", "raw_name": "HbA1c", "value_text": "7.2", "unit": "%",
+              "ref_text": "4.0 - 5.6"}  # fmt: skip
+    return SavedResult.model_construct(**{**fields, **overrides})
 
 
 @pytest.fixture
@@ -55,7 +49,7 @@ def test_save_report_and_find_it(conn):
         make_report(),
         [
             make_result(),
-            make_result(test_code="HB", raw_name="Haemoglobin", raw_value_text="12.1"),
+            make_result(test_code="HB", raw_name="Haemoglobin", value_text="12.1"),
         ],
     )
     assert db.find_report_id(conn, "abc123") == report_id
@@ -82,7 +76,7 @@ def test_duplicate_sha256_rejected(conn):
 
 def test_replace_deletes_old_report_and_its_results(conn):
     old_id = db.save_report(conn, make_report(), [make_result()])
-    new_id = db.save_report(conn, make_report(), [make_result(raw_value_text="7.0")], replace=True)
+    new_id = db.save_report(conn, make_report(), [make_result(value_text="7.0")], replace=True)
     assert new_id != old_id  # AUTOINCREMENT: ids are never reused
     assert conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == 1
     assert conn.execute("SELECT COUNT(*) FROM results WHERE report_id = ?", (old_id,)).fetchone()[0] == 0
@@ -124,7 +118,7 @@ def test_renormalize_recomputes_every_saved_result(conn):
             make_result(
                 test_code="VITD",
                 raw_name="Vitamin D",
-                raw_value_text="150",
+                value_text="150",
                 unit="nmol/L",
                 ref_text="75 - 250",
             )
@@ -144,7 +138,7 @@ def test_renormalize_splits_a_flag_saved_inside_the_value(conn):
             make_result(
                 test_code="TG",
                 raw_name="Triglyceride",
-                raw_value_text="H 168.0",
+                value_text="H 168.0",
                 unit="mg/dL",
                 ref_text="<150",
             )
@@ -155,6 +149,7 @@ def test_renormalize_splits_a_flag_saved_inside_the_value(conn):
     assert tuple(row) == ("168.0", "H", 168.0, 168.0, 150.0)
 
 
+@pytest.mark.filterwarnings("ignore:Pydantic serializer warnings")  # the invalid value is the point
 def test_is_scanned_must_be_0_or_1(conn):
     with pytest.raises(sqlite3.IntegrityError):
         db.save_report(conn, make_report(is_scanned=2), [])

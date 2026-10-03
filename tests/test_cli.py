@@ -3,11 +3,11 @@ from contextlib import closing
 
 import pytest
 
-from app import db, extract
+from app import db, gemma
 from app.config import settings
 from app.errors import ExtractError
 from app.extract import main, run
-from app.gemma import PageExtraction
+from app.models import PageExtraction
 
 GOOD_REPLY = {
     "patient_name": "Mrs. Sunita Patil",
@@ -40,7 +40,10 @@ EMPTY_REPLY = {
 
 
 class FakeGemma:
-    """Stands in for ask_gemma and transcribe: page 1 gets `first`, other pages an empty reply."""
+    """Stands in for gemma.extract_results and gemma.transcribe.
+
+    Page 1 gets `first`; other pages get an empty reply.
+    """
 
     def __init__(self, first=GOOD_REPLY):
         self.first, self.pages, self.transcribed = first, [], []
@@ -64,15 +67,15 @@ def storage(tmp_path, monkeypatch):
 @pytest.fixture
 def use_gemma(monkeypatch):
     def install(fake):
-        monkeypatch.setattr(extract, "ask_gemma", fake.ask)
-        monkeypatch.setattr(extract, "transcribe", fake.transcribe)
+        monkeypatch.setattr(gemma, "extract_results", fake.ask)
+        monkeypatch.setattr(gemma, "transcribe", fake.transcribe)
         return fake
 
     return install
 
 
 @pytest.fixture
-def gemma(use_gemma):
+def fake_gemma(use_gemma):
     return use_gemma(FakeGemma())
 
 
@@ -81,7 +84,7 @@ def query(sql, *args):
         return [tuple(row) for row in conn.execute(sql, args)]
 
 
-def test_run_saves_report_and_returns_output(storage, gemma, make_pdf, report_page):
+def test_run_saves_report_and_returns_output(storage, fake_gemma, make_pdf, report_page):
     pdf = make_pdf([report_page])
     out = run(pdf)
     assert out.report_id == 1
@@ -166,17 +169,17 @@ def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page)
     ]
 
 
-def test_same_file_twice_is_skipped_without_calling_gemma(storage, gemma, make_pdf, report_page, caplog):
+def test_same_file_twice_is_skipped_without_calling_gemma(storage, fake_gemma, make_pdf, report_page, caplog):
     caplog.set_level("INFO", logger="app")
     pdf = make_pdf([report_page])
     run(pdf)
-    calls = len(gemma.pages)
+    calls = len(fake_gemma.pages)
     assert run(pdf) is None
-    assert len(gemma.pages) == calls
+    assert len(fake_gemma.pages) == calls
     assert "already extracted as report #1" in caplog.text
 
 
-def test_force_replaces_the_old_report(storage, gemma, make_pdf, report_page):
+def test_force_replaces_the_old_report(storage, fake_gemma, make_pdf, report_page):
     pdf = make_pdf([report_page])
     first = run(pdf)
     second = run(pdf, force=True)
@@ -208,10 +211,10 @@ def test_sample_date_in_the_future_is_a_warning(storage, use_gemma, make_pdf, re
     assert any("2096-09-12 is in the future" in w for w in out.warnings)
 
 
-def test_scanned_page_is_transcribed_and_marks_the_report(storage, gemma, make_pdf, report_page):
+def test_scanned_page_is_transcribed_and_marks_the_report(storage, fake_gemma, make_pdf, report_page):
     run(make_pdf([report_page, []]))
-    assert gemma.transcribed == [2]
-    assert [(p.mode, p.text) for p in gemma.pages][1] == ("vision", "transcription of page 2")
+    assert fake_gemma.transcribed == [2]
+    assert [(p.mode, p.text) for p in fake_gemma.pages][1] == ("vision", "transcription of page 2")
     assert query("SELECT is_scanned FROM reports") == [(1,)]
 
 
@@ -230,14 +233,14 @@ def test_ollama_failing_mid_report_saves_nothing(storage, use_gemma, make_pdf, r
     assert query("SELECT COUNT(*) FROM reports") == [(0,)]
 
 
-def test_path_with_apostrophe_and_spaces(storage, gemma, make_pdf, report_page):
+def test_path_with_apostrophe_and_spaces(storage, fake_gemma, make_pdf, report_page):
     pdf = make_pdf([report_page], name="Dnyanesh's Asus/lab reports/Mom's report 2026.pdf")
     out = run(pdf)
     assert out.report_id == 1
     assert (storage / "originals" / f"{out.sha256}.pdf").exists()
 
 
-def test_main_prints_json_on_stdout(storage, gemma, make_pdf, report_page, capsys):
+def test_main_prints_json_on_stdout(storage, fake_gemma, make_pdf, report_page, capsys):
     assert main([str(make_pdf([report_page]))]) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out)["results"][0]["value_text"] == "7.2"

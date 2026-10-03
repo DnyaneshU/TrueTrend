@@ -5,18 +5,16 @@ gitignored: real reports and patient data never go into the repo.
 """
 
 import sqlite3
+from collections.abc import Sequence
 from importlib import resources
 from pathlib import Path
 
 from app.config import settings
+from app.models import ReportRecord, SavedResult
 
 SCHEMA = resources.files("app").joinpath("schema.sql").read_text(encoding="utf-8")
 
-REPORT_COLUMNS = (
-    "lab_name", "sample_date", "report_date", "source", "file_path", "sha256",
-    "is_scanned", "patient_name_raw", "patient_age_raw", "patient_sex_raw",
-    "extract_model", "extract_seconds", "raw_json",
-)  # fmt: skip
+REPORT_COLUMNS = tuple(ReportRecord.model_fields)
 RESULT_COLUMNS = (
     "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "flag", "page",
     "value", "qualifier", "value_std", "unit_std", "ref_low", "ref_high",
@@ -34,6 +32,7 @@ _INSERT_RESULT = (
     f"INSERT INTO results (report_id, {', '.join(RESULT_COLUMNS)}) "
     f"VALUES (?, {', '.join(['?'] * len(RESULT_COLUMNS))})"
 )
+_NOT_VERIFIED = "not verified yet"
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
@@ -56,20 +55,29 @@ def find_report_id(conn: sqlite3.Connection, sha256: str) -> int | None:
     return row["id"] if row else None
 
 
-def save_report(conn: sqlite3.Connection, report: dict, results: list[dict], replace: bool = False) -> int:
+def save_report(
+    conn: sqlite3.Connection, report: ReportRecord, results: Sequence[SavedResult], replace: bool = False
+) -> int:
     """Insert a report and its results in one transaction and return the report id.
 
     With replace=True an existing report with the same sha256 is deleted inside the
     same transaction (its results cascade), so a failed save keeps the old data.
-    `report` needs every key in REPORT_COLUMNS and each result every key in
-    RESULT_COLUMNS; values may be None.
     """
     with conn:
         if replace:
-            conn.execute("DELETE FROM reports WHERE sha256 = ?", (report["sha256"],))
-        report_id = conn.execute(_INSERT_REPORT, [report[column] for column in REPORT_COLUMNS]).lastrowid
-        conn.executemany(
-            _INSERT_RESULT,
-            [[report_id, *(result[column] for column in RESULT_COLUMNS)] for result in results],
-        )
+            conn.execute("DELETE FROM reports WHERE sha256 = ?", (report.sha256,))
+        report_row = report.model_dump()
+        report_id = conn.execute(_INSERT_REPORT, [report_row[column] for column in REPORT_COLUMNS]).lastrowid
+        conn.executemany(_INSERT_RESULT, [[report_id, *_result_row(result)] for result in results])
     return report_id
+
+
+def _result_row(result: SavedResult) -> list:
+    """A result's values in RESULT_COLUMNS order."""
+    notes = [_NOT_VERIFIED] if result.status == "needs_check" else []
+    row = {
+        **result.model_dump(),
+        "raw_value_text": result.value_text,
+        "check_notes": "; ".join(notes + result.notes) or None,
+    }
+    return [row[column] for column in RESULT_COLUMNS]

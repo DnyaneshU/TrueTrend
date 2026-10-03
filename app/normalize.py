@@ -9,12 +9,15 @@ Units and conversions come from data/lab_tests.toml.
 
 import logging
 import re
+import sqlite3
 import sys
 from contextlib import closing
 
 from app import db
+from app.console import configure_console
 from app.lab_tests import CATALOG
 from app.models import Normalized, Result
+from app.text import split_flag
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +26,6 @@ _QUALIFIER = {"<": "<", ">": ">", "<=": "<=", ">=": ">=", "≤": "<=", "≥": ">
 # one number, optionally after <, >, <=, >= and before non-numeric text such as a unit
 _VALUE = re.compile(rf"^\s*(?P<qualifier><=|>=|≤|≥|<|>)?\s*(?P<number>{_NUMBER})\D*$")
 
-# The lab's high/low mark printed in the value's cell, before or after it: "H 168.0", "7.2 L".
-_FLAG_WORDS = "|".join(map(re.escape, sorted(CATALOG.report.flags, key=len, reverse=True)))
-_FLAG_FIRST = re.compile(rf"^({_FLAG_WORDS})\s+(.*\d.*)$")
-_FLAG_LAST = re.compile(rf"^(.*\d.*?)\s+({_FLAG_WORDS})$")
 SIGNIFICANT_DIGITS = 6  # enough for any printed lab value; removes floating-point noise
 
 _RANGE_NUMBER = r"\d+(?:\.\d+)?"
@@ -34,15 +33,6 @@ _BETWEEN = re.compile(rf"^(?P<low>{_RANGE_NUMBER})\s*(?:-|–|—|to)\s*(?P<high
 _BELOW = re.compile(rf"^(?:<=?|≤|up\s*to|less\s+than|below)\s*(?P<high>{_RANGE_NUMBER})\D*$", re.I)
 _ABOVE = re.compile(rf"^(?:>=?|≥|more\s+than|greater\s+than|above)\s*(?P<low>{_RANGE_NUMBER})\D*$", re.I)
 _LABEL = re.compile(r"^(?P<label>[^\W\d][^\W\d .]*(?: [^\W\d][^\W\d.]*)*)\s*[:\-–]\s*(?P<rest>.+)$")
-
-
-def split_flag(value_text: str) -> tuple[str | None, str]:
-    """('H', '168.0') from 'H 168.0' or '168.0 H'; (None, value) when no high/low mark is printed."""
-    if match := _FLAG_FIRST.match(value_text):
-        return match[1], match[2]
-    if match := _FLAG_LAST.match(value_text):
-        return match[2], match[1]
-    return None, value_text
 
 
 def parse_value(text: str | None) -> tuple[str | None, float] | None:
@@ -106,7 +96,7 @@ def normalize(result: Result) -> Normalized:
     )
 
 
-def renormalize(conn) -> int:
+def renormalize(conn: sqlite3.Connection) -> int:
     """Recompute the normalised columns of every saved result; returns how many were updated."""
     rows = conn.execute(
         "SELECT id, page, test_code, raw_name, raw_value_text, unit, ref_text, flag FROM results"
@@ -145,7 +135,7 @@ def _to_float(number: str) -> float:
 
 
 def main() -> int:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    configure_console()
     with closing(db.connect()) as conn:
         logger.info("Re-normalised %d saved results.", renormalize(conn))
     return 0

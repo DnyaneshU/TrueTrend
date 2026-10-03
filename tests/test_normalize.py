@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.lab_tests import LAB_TESTS
+from app.lab_tests import CATALOG
 from app.models import Result
 from app.normalize import normalize, parse_range, parse_value
 
@@ -125,7 +125,7 @@ def test_ranges_that_are_not_one_normal_range_give_none(printed):
 def test_values_are_converted_to_the_standard_unit(code, value, unit, standard):
     normalized = normalize(result(code=code, value=value, unit=unit, ref=None))
     assert normalized.value_std == pytest.approx(standard, abs=0.001)
-    assert normalized.unit_std == next(test.unit for test in LAB_TESTS if test.code == code)
+    assert normalized.unit_std == CATALOG.test(code).unit
 
 
 def test_reference_range_is_converted_with_the_value():
@@ -162,5 +162,5 @@ def test_word_result_has_no_number():
 
 
 def test_every_standard_unit_converts_one_to_one():
-    for test in LAB_TESTS:
+    for test in CATALOG.tests:
         assert test.conversion(test.unit).apply(7.25) == 7.25, test.code

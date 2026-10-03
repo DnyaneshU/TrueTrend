@@ -133,14 +133,11 @@ class Catalog(BaseModel):
             return cls.model_validate(tomllib.load(file))
 
     def test(self, code: str) -> LabTest:
-        return next(test for test in self.tests if test.code == code)
+        for test in self.tests:
+            if test.code == code:
+                return test
+        raise KeyError(f"unknown test code: {code!r}")
 
 
 CATALOG = Catalog.load(settings.data_dir / "lab_tests.toml")
-LAB_TESTS = CATALOG.tests
-TestCode = Literal[tuple(test.code for test in LAB_TESTS)]
-
-
-def name_conflict(test_code: str, raw_name: str) -> str | None:
-    """Why the printed test name can't be `test_code`, or None if it fits."""
-    return CATALOG.test(test_code).conflict(raw_name)
+TestCode = Literal[tuple(test.code for test in CATALOG.tests)]

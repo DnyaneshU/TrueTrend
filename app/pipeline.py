@@ -9,21 +9,18 @@ import logging
 import re
 import time
 from collections.abc import Callable
-from dataclasses import replace
 
 from pydantic import ValidationError
 
 from app.dates import parse_date
 from app.errors import ExtractError
-from app.gemma import PageExtraction
-from app.lab_tests import CATALOG, name_conflict
-from app.models import Extraction, Header, PageReply, PageSummary, Result
-from app.normalize import split_flag
-from app.pages import PageInput
+from app.lab_tests import CATALOG
+from app.models import Extraction, Header, PageExtraction, PageInput, PageReply, PageSummary, Result
+from app.text import clean_text, plural, split_flag
 
 logger = logging.getLogger(__name__)
 
-Ask = Callable[[PageInput, bool], PageExtraction]  # (page, retry) -> reply
+ExtractResults = Callable[[PageInput, bool], PageExtraction]  # (page, retry) -> Gemma's reply
 Transcribe = Callable[[PageInput], str]  # scanned page -> its text
 
 DATE_FIELDS = ("sample_date", "report_date")
@@ -32,18 +29,19 @@ DATE_FIELDS = ("sample_date", "report_date")
 QUIET_FIELDS = ("report_date", "lab_name")
 
 
-def extract_pages(pages: list[PageInput], ask: Ask, transcribe: Transcribe) -> Extraction:
+def extract_pages(pages: list[PageInput], extract: ExtractResults, transcribe: Transcribe) -> Extraction:
     """Ask Gemma about each page and merge the answers into one report.
 
     A scanned page is transcribed once first; a retry reuses the transcription.
+    Raises ExtractError when no page could be read.
     """
     out = Extraction()
     header_page: dict[str, int] = {}  # which page each header value came from
     for page in pages:
         started = time.perf_counter()
         if page.mode == "vision":
-            page = replace(page, text=transcribe(page))
-        reply = _ask_with_retry(ask, page)
+            page = page.model_copy(update={"text": transcribe(page)})
+        reply = _extract_with_retry(extract, page)
         seconds = round(time.perf_counter() - started, 1)
         out.replies.append(
             PageReply(
@@ -81,14 +79,10 @@ def extract_pages(pages: list[PageInput], ask: Ask, transcribe: Transcribe) -> E
     return out
 
 
-def plural(count: int, noun: str) -> str:
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
-def _ask_with_retry(ask: Ask, page: PageInput) -> PageExtraction | None:
+def _extract_with_retry(extract: ExtractResults, page: PageInput) -> PageExtraction | None:
     for retry in (False, True):
         try:
-            return ask(page, retry)
+            return extract(page, retry)
         except ValidationError:
             continue
     return None
@@ -100,7 +94,7 @@ def _merge_header(
     """Fill header fields this page prints for the first time; warn where it disagrees."""
     warnings = []
     for name in Header.model_fields:
-        value = _clean(getattr(reply, name))
+        value = clean_text(getattr(reply, name))
         if value is None:
             continue
         current = getattr(header, name)
@@ -120,15 +114,19 @@ def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[Result], 
     """The page's results, tidied, and warnings for the rows dropped as untrustworthy."""
     rows: list[Result] = []
     warnings: list[str] = []
-    seen: set[tuple] = set()
+    seen: set[tuple[str, str, str | None]] = set()
     for row in reply.results:
-        raw_name, value_text, unit = _clean(row.raw_name), _clean(row.value_text), _clean(row.unit)
+        raw_name, value_text, unit = (
+            clean_text(row.raw_name),
+            clean_text(row.value_text),
+            clean_text(row.unit),
+        )
         if value_text is None:
             problem = f"{row.test_code} had no value"
         elif raw_name is None:
             problem = f"{row.test_code} had no test name"
         else:
-            problem = name_conflict(row.test_code, raw_name)
+            problem = CATALOG.test(row.test_code).conflict(raw_name)
         if problem:
             warnings.append(f"page {page_number}: {problem}; row dropped")
             continue
@@ -145,7 +143,7 @@ def _clean_rows(reply: PageExtraction, page_number: int) -> tuple[list[Result], 
                 value_text=value_text,
                 flag=flag,
                 unit=unit,
-                ref_text=_clean(row.ref_text),
+                ref_text=clean_text(row.ref_text),
             )
         )
     return rows, warnings
@@ -161,14 +159,6 @@ def _repeat_warnings(results: list[Result]) -> list[str]:
         for code, on_pages in pages_by_code.items()
         if len(on_pages) > 1
     ]
-
-
-def _clean(text: str | None) -> str | None:
-    """Collapse whitespace and drop the " | " column markers page_text added; empty becomes None."""
-    if text is None:
-        return None
-    cleaned = " ".join(text.replace(" | ", " ").split())
-    return None if not cleaned or cleaned.casefold() in CATALOG.report.empty_words else cleaned
 
 
 def _same(field_name: str, a: str, b: str) -> bool:

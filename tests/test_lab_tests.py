@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.lab_tests import LAB_TESTS, TestCode, name_conflict
+from app.lab_tests import CATALOG, TestCode
 
 # Names as Indian lab reports print them; each must be accepted for its code.
 MATCHING = [
@@ -117,27 +117,29 @@ CONFLICTING = [
 
 @pytest.mark.parametrize("code, name", MATCHING)
 def test_matching_names_are_accepted(code, name):
-    assert name_conflict(code, name) is None
+    assert CATALOG.test(code).conflict(name) is None
 
 
 @pytest.mark.parametrize("code, name", CONFLICTING)
 def test_different_tests_are_caught(code, name):
-    assert name_conflict(code, name) is not None
+    assert CATALOG.test(code).conflict(name) is not None
 
 
 def test_conflict_reason_names_the_printed_test():
-    assert name_conflict("GLU_F", "Estimated Average Glucose") == ("'Estimated Average Glucose' is not GLU_F")
+    assert CATALOG.test("GLU_F").conflict("Estimated Average Glucose") == (
+        "'Estimated Average Glucose' is not GLU_F"
+    )
 
 
 @given(data=st.data())
 def test_every_catalog_name_matches_in_any_capitalisation(data):
-    test = data.draw(st.sampled_from(LAB_TESTS))
+    test = data.draw(st.sampled_from(CATALOG.tests))
     phrase = data.draw(st.sampled_from(test.names))
     printed = "".join(data.draw(st.sampled_from([c.lower(), c.upper()])) for c in phrase)
     assert test.conflict(printed) is None, (test.code, printed)
 
 
 def test_catalog_has_the_15_mvp_tests_once_each():
-    codes = [test.code for test in LAB_TESTS]
+    codes = [test.code for test in CATALOG.tests]
     assert len(codes) == len(set(codes)) == 15
     assert set(typing.get_args(TestCode)) == set(codes)
