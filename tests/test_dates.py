@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.dates import parse_date
+from arogya_vahi.dates import parse_date
 
 # How labs print the date part (day always before month), the time part, and a label.
 DATE_FORMATS = [

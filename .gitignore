@@ -6,30 +6,39 @@ storage/
 *.sqlite
 *.sqlite3
 *.pdf
+*.part
 *.jpg
 *.jpeg
 *.png
 *.heic
 *.webp
-/out*.json
-# ...except synthetic sample reports and the web app's icons
+# ...except synthetic sample reports and the web app's icons, once they exist
 !samples/**
 !web/icons/**
 
-# Python
+# Python and tooling
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
 .hypothesis/
 .ruff_cache/
-# build artifacts from `pip install -e .`
+.mypy_cache/
+.coverage
+htmlcov/
+*.log
+# build artifacts
 *.egg-info/
 build/
 dist/
 
-# Secrets
+# Secrets and local settings
 .env
+.env.*
+
+# Editors
+.idea/
+.vscode/
 
 # Development notes and AI-assistant working files: kept locally, not part of the app
 CLAUDE.md

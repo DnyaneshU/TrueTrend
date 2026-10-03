@@ -2,34 +2,32 @@
 
 Nothing is guessed: a value that is not one number, a unit the catalog does not list,
 or a range that is not one normal range is left empty with a note saying why.
-Units and conversions come from data/lab_tests.toml.
+Units and conversions come from arogya_vahi/data/lab_tests.toml.
 """
 
 import re
 
-from app.lab_tests import CATALOG
-from app.models import Normalized, Result
-from app.text import NUMBER, QUALIFIER, to_float
+from arogya_vahi.lab_tests import CATALOG, LabTest
+from arogya_vahi.models import Normalized, Result
+from arogya_vahi.text import NUMBER, QUALIFIER, QUALIFIERS, Qualifier, to_float
 
-_QUALIFIER = {"<": "<", ">": ">", "<=": "<=", ">=": ">=", "≤": "<=", "≥": ">="}
 # one number, optionally after <, >, <=, >= and before non-numeric text such as a unit
 _VALUE = re.compile(rf"^\s*(?P<qualifier>{QUALIFIER})?\s*(?P<number>{NUMBER})\D*$")
 
 SIGNIFICANT_DIGITS = 6  # enough for any printed lab value; removes floating-point noise
 
-_RANGE_NUMBER = r"\d+(?:\.\d+)?"
-_BETWEEN = re.compile(rf"^(?P<low>{_RANGE_NUMBER})\s*(?:-|–|—|to)\s*(?P<high>{_RANGE_NUMBER})\D*$", re.I)
-_BELOW = re.compile(rf"^(?:<=?|≤|up\s*to|less\s+than|below)\s*(?P<high>{_RANGE_NUMBER})\D*$", re.I)
-_ABOVE = re.compile(rf"^(?:>=?|≥|more\s+than|greater\s+than|above)\s*(?P<low>{_RANGE_NUMBER})\D*$", re.I)
+_BETWEEN = re.compile(rf"^(?P<low>{NUMBER})\s*(?:-|–|—|to)\s*(?P<high>{NUMBER})\D*$", re.I)
+_BELOW = re.compile(rf"^(?:<=?|≤|up\s*to|less\s+than|below)\s*(?P<high>{NUMBER})\D*$", re.I)
+_ABOVE = re.compile(rf"^(?:>=?|≥|more\s+than|greater\s+than|above)\s*(?P<low>{NUMBER})\D*$", re.I)
 _LABEL = re.compile(r"^(?P<label>[^\W\d][^\W\d .]*(?: [^\W\d][^\W\d.]*)*)\s*[:\-–]\s*(?P<rest>.+)$")
 
 
-def parse_value(text: str | None) -> tuple[str | None, float] | None:
+def parse_value(text: str | None) -> tuple[Qualifier | None, float] | None:
     """('<', 148.0) from '< 148'; (None, 7.2) from '7.2 %'; None unless the text is one number."""
     match = _VALUE.match(text or "")
     if not match:
         return None
-    return _QUALIFIER.get(match["qualifier"]), to_float(match["number"])
+    return QUALIFIERS.get(match["qualifier"]), to_float(match["number"])
 
 
 def parse_range(text: str | None) -> tuple[float | None, float | None] | None:
@@ -37,7 +35,7 @@ def parse_range(text: str | None) -> tuple[float | None, float | None] | None:
 
     None unless the text is one normal range: a label other than a normal-range label
     ("Low: <40", "Deficiency: <10") marks a risk category, and a list of categories is
-    not one range.
+    not one range, nor is a low limit above the high one.
     """
     text = (text or "").strip()
     if label := _LABEL.match(text):
@@ -45,17 +43,17 @@ def parse_range(text: str | None) -> tuple[float | None, float | None] | None:
             return None
         text = label["rest"].strip()
     if match := _BETWEEN.match(text):
-        return float(match["low"]), float(match["high"])
+        low, high = to_float(match["low"]), to_float(match["high"])
+        return (low, high) if low <= high else None
     if match := _BELOW.match(text):
-        return None, float(match["high"])
+        return None, to_float(match["high"])
     if match := _ABOVE.match(text):
-        return float(match["low"]), None
+        return to_float(match["low"]), None
     return None
 
 
-def normalize(result: Result) -> Normalized:
+def normalize(result: Result, test: LabTest) -> Normalized:
     """The result's value and normal range as numbers, converted to the test's standard unit."""
-    test = CATALOG.test(result.test_code)
     notes = []
     parsed = parse_value(result.value_text)
     if parsed is None:

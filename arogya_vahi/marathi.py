@@ -15,8 +15,9 @@ def digits(text: str) -> str:
 
 
 def number(value: float) -> str:
-    """A saved number as Devanagari digits, without trailing zeros: 7.10 -> '७.१', 141.0 -> '१४१'."""
-    return digits(f"{value:g}")
+    """A saved number as Devanagari digits, without trailing zeros or exponents: 7.10 -> '७.१'."""
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return digits(text if text not in ("", "-0") else "0")
 
 
 def day(when: date) -> str:

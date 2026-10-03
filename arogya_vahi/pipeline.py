@@ -2,7 +2,7 @@
 
 Page numbers come from code, report details are taken from the first page that
 prints them, and rows that can't be trusted are dropped with a warning. What is kept
-is checked against the PDF afterwards, by app.verify.
+is checked against the PDF afterwards, by arogya_vahi.verify.
 """
 
 import logging
@@ -12,11 +12,11 @@ from collections.abc import Callable
 
 from pydantic import ValidationError
 
-from app.dates import parse_date
-from app.errors import ExtractError
-from app.lab_tests import CATALOG
-from app.models import Extraction, Header, PageExtraction, PageInput, PageReply, PageSummary, Result
-from app.text import clean_text, plural, split_flag
+from arogya_vahi.dates import parse_date
+from arogya_vahi.errors import UserError
+from arogya_vahi.lab_tests import CATALOG
+from arogya_vahi.models import Extraction, Header, PageExtraction, PageInput, PageReply, PageSummary, Result
+from arogya_vahi.text import clean_text, plural, same_name, split_flag
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +33,15 @@ def extract_pages(pages: list[PageInput], extract: ExtractResults, transcribe: T
     """Ask Gemma about each page and merge the answers into one report.
 
     A scanned page is transcribed once first; a retry reuses the transcription.
-    Raises ExtractError when no page could be read.
+    Raises UserError when no page could be read.
     """
     out = Extraction()
     header_page: dict[str, int] = {}  # which page each header value came from
     for page in pages:
         started = time.perf_counter()
         if page.mode == "vision":
-            page = page.model_copy(update={"text": transcribe(page)})
-        reply = _extract_with_retry(extract, page)
+            page = page.model_copy(update={"text": transcribe(page).strip()})
+        reply = _extract_with_retry(extract, page) if page.text else None
         seconds = round(time.perf_counter() - started, 1)
         out.replies.append(
             PageReply(
@@ -52,8 +52,11 @@ def extract_pages(pages: list[PageInput], extract: ExtractResults, transcribe: T
             )
         )
         if reply is None:
+            problem = (
+                "Gemma's answer was unreadable twice" if page.text else "Gemma read no text off the scan"
+            )
             out.pages.append(PageSummary(page=page.number, mode="failed", results=0, seconds=seconds))
-            out.warnings.append(f"page {page.number}: Gemma's answer was unreadable twice; page skipped")
+            out.warnings.append(f"page {page.number}: {problem}; page skipped")
             logger.info("page %d/%d · %s · FAILED · %s s", page.number, page.total, page.mode, seconds)
             continue
         out.warnings += _merge_header(out.header, header_page, reply, page.number)
@@ -71,8 +74,8 @@ def extract_pages(pages: list[PageInput], extract: ExtractResults, transcribe: T
         )
 
     if all(summary.mode == "failed" for summary in out.pages):
-        raise ExtractError(
-            "Gemma's answer was unreadable for every page, so nothing was saved. "
+        raise UserError(
+            "Gemma could not read any page of the report, so nothing was saved. "
             "Try again, or try --model gemma4:e2b."
         )
     out.warnings += _repeat_warnings(out.results)
@@ -162,9 +165,9 @@ def _repeat_warnings(results: list[Result]) -> list[str]:
 
 
 def _same(field_name: str, a: str, b: str) -> bool:
-    """Equal ignoring case; the same day however it is written; the same age in years."""
+    """The same day however it is written; the same age in years; otherwise the same name."""
     if field_name in DATE_FIELDS and (day := parse_date(a)) is not None:
         return day == parse_date(b)
     if field_name == "age" and (years := re.findall(r"\d+", a)):
         return years[:1] == re.findall(r"\d+", b)[:1]
-    return a.casefold() == b.casefold()
+    return same_name(a, b)

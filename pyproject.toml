@@ -5,41 +5,60 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "arogya-vahi"
 version = "0.1.0"
-description = "Keeps a family's lab reports in one place and reads them with local Gemma; reports never leave the laptop."
+description = "Keeps a family's lab reports in one place, verifies every value against the PDF and explains changes in Marathi, with local Gemma; reports never leave the laptop."
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Dnyanesh Ujalambkar" }]
+keywords = ["lab reports", "health records", "gemma", "ollama", "marathi", "reference change value"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: Marathi",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
 dependencies = [
-    "pymupdf~=1.28.2",
-    "ollama~=0.6.3",
-    "httpx~=0.28.1",
-    "pydantic~=2.13.5",
-    "pydantic-settings~=2.15",
-    "python-dateutil~=2.9.0",
+    "pymupdf>=1.28.2,<2",
+    "ollama>=0.6.3,<1",
+    "httpx>=0.28.1,<1",
+    "pydantic>=2.13.5,<3",
+    "pydantic-settings>=2.15,<3",
+    "python-dateutil>=2.9.0,<3",
+    "platformdirs>=4.3,<5",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest~=9.1",
-    "hypothesis~=6.168",
-    "ruff~=0.16",
+    "pytest>=9.1,<10",
+    "hypothesis>=6.168,<7",
+    "ruff>=0.16,<0.17",
+    "build>=1.2,<2",
 ]
 
+[project.urls]
+Repository = "https://github.com/DnyaneshU/TrueTrend"
+
 [project.scripts]
-arogya-extract = "app.extract:main"
-arogya-recheck = "app.recheck:main"
-arogya-summary = "app.summary:main"
+arogya-extract = "arogya_vahi.extract:main"
+arogya-recheck = "arogya_vahi.recheck:main"
+arogya-summary = "arogya_vahi.summary:main"
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["arogya_vahi*"]
 
 [tool.setuptools.package-data]
-app = ["prompts/*.txt", "schema.sql"]
+arogya_vahi = ["data/*.toml", "prompts/*.txt", "schema.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
-addopts = "-ra"   # list skipped tests with their reason (e.g. the live Gemma test)
+addopts = "-ra"   # list skipped tests with their reason (e.g. the live Gemma tests)
 filterwarnings = ["error"]   # a new warning fails the suite instead of scrolling past
+markers = ["live: calls the real local Gemma through Ollama (run with AROGYA_LIVE=1)"]
 
 [tool.ruff]
 line-length = 110

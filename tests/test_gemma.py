@@ -6,10 +6,12 @@ import ollama
 import pytest
 from pydantic import ValidationError
 
-from app import gemma, lab_tests
-from app.errors import ExtractError
-from app.gemma import extract_results, transcribe
-from app.models import PageExtraction, PageInput
+from arogya_vahi import gemma, lab_tests
+from arogya_vahi.config import Settings
+from arogya_vahi.errors import UserError
+from arogya_vahi.gemma import _client as _real_client
+from arogya_vahi.gemma import extract_results, transcribe
+from arogya_vahi.models import PageExtraction, PageInput
 
 VALID_REPLY = (
     '{"patient_name":"Mrs. Sunita Patil","age":"62","sex":"F","lab_name":"SUNRISE DIAGNOSTICS",'
@@ -23,7 +25,7 @@ VISION_PAGE = PageInput(number=2, total=2, mode="vision", image=b"\x89PNG fake")
 
 
 class FakeChat:
-    """Stands in for ollama.chat: records the call and returns `reply` or raises `error`."""
+    """Stands in for the Ollama client's chat: records the call and returns `reply` or raises `error`."""
 
     def __init__(self, reply=VALID_REPLY, error=None):
         self.reply, self.error, self.calls = reply, error, []
@@ -39,7 +41,7 @@ class FakeChat:
 def fake_chat(monkeypatch):
     def install(**kwargs):
         fake = FakeChat(**kwargs)
-        monkeypatch.setattr(gemma.ollama, "chat", fake)
+        monkeypatch.setattr(gemma, "_client", lambda: SimpleNamespace(chat=fake))
         return fake
 
     return install
@@ -73,7 +75,7 @@ def test_transcribe_sends_the_page_image_without_a_schema(fake_chat):
 
 def test_transcribe_turns_ollama_problems_into_clear_errors(fake_chat):
     fake_chat(error=ConnectionError("refused"))
-    with pytest.raises(ExtractError, match="Can't reach Ollama"):
+    with pytest.raises(UserError, match="Can't reach Ollama"):
         transcribe(VISION_PAGE, "gemma4:e4b")
 
 
@@ -123,7 +125,7 @@ def test_unknown_test_code_raises_validation_error(fake_chat):
 )
 def test_ollama_problems_become_clear_errors(fake_chat, error, message):
     fake_chat(error=error)
-    with pytest.raises(ExtractError, match=message):
+    with pytest.raises(UserError, match=message):
         extract_results(TEXT_PAGE, "gemma4:e4b")
 
 
@@ -138,8 +140,8 @@ def test_schema_requires_every_field_and_limits_test_codes():
         "report_date",
         "results",
     }
-    codes = set(typing.get_args(lab_tests.TestCode))
-    assert len(codes) == 15
+    codes = {test.code for test in lab_tests.CATALOG.tests}
+    assert set(typing.get_args(lab_tests.TestCode)) == codes
     assert set(schema["$defs"]["ExtractedResult"]["properties"]["test_code"]["enum"]) == codes
 
 
@@ -152,3 +154,23 @@ def test_prompt_excludes_the_cbc_look_alikes_of_haemoglobin():
 def test_prompt_describes_every_test_code():
     for code in typing.get_args(lab_tests.TestCode):
         assert f"\n  {code} " in gemma.SYSTEM_PROMPT
+
+
+def test_the_ollama_client_uses_the_configured_local_host(monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "http://example.com:11434")  # ignored: it could send reports away
+    _real_client.cache_clear()
+    try:
+        assert str(_real_client()._client.base_url).startswith("http://127.0.0.1:11434")
+    finally:
+        _real_client.cache_clear()
+
+
+@pytest.mark.parametrize("host", ["http://192.168.1.20:11434", "https://ollama.example.com"])
+def test_a_remote_ollama_must_be_allowed_explicitly(host):
+    with pytest.raises(ValueError, match="is not this computer"):
+        Settings(ollama_host=host, _env_file=None)
+    assert Settings(ollama_host=host, allow_remote_ollama=True, _env_file=None).ollama_host == host
+
+
+def test_a_host_without_a_scheme_is_http():
+    assert Settings(ollama_host="localhost:11434", _env_file=None).ollama_host == "http://localhost:11434"

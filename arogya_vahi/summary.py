@@ -1,14 +1,14 @@
 """Command line: the Marathi summary of the latest report, made by rules over verified results.
 
-    python -m app.summary [--json]
+    arogya-summary [--json]        (or: python -m arogya_vahi.summary)
 
-At most 3 sentences, most important first, each with a question for the doctor:
+At most 3 sentences, most important first, and for each finding a question for the doctor:
 
 1. a real change in the same direction three sample dates in a row,
-2. a real change since the previous sample (app.change),
+2. a real change since the previous sample (arogya_vahi.change),
 3. a result outside that lab's printed normal range, when the range was verified too.
 
-Sentences are templates (data/summary_mr.toml) whose numbers are placeholders, filled
+Sentences are templates (arogya_vahi/data/summary_mr.toml) whose numbers are placeholders, filled
 in by code with results exactly as the report prints them. A result that needs checking
 is never stated; the summary only says how many there are.
 """
@@ -16,33 +16,33 @@ is never stated; the summary only says how many there are.
 import argparse
 import logging
 import sys
-import tomllib
 from collections import Counter
 from collections.abc import Iterable
 from contextlib import closing
 from string import Formatter
+from typing import get_args
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from app import db, marathi
-from app.change import timeline_changes, timelines
-from app.config import settings
-from app.console import configure_console
-from app.lab_tests import CATALOG, normalise_name
-from app.models import Change, Finding, FindingKind, Summary, TimelinePoint
-from app.normalize import parse_range
+from arogya_vahi import cli, db, marathi
+from arogya_vahi.change import timeline_changes, timelines
+from arogya_vahi.lab_tests import CATALOG
+from arogya_vahi.models import Change, Finding, FindingKind, Summary, TimelinePoint
+from arogya_vahi.normalize import parse_range
+from arogya_vahi.resources import load_toml
+from arogya_vahi.text import same_name
 
 logger = logging.getLogger(__name__)
 
 MAX_SENTENCES = 3
-PRIORITY: tuple[FindingKind, ...] = (
-    "trend_increase", "trend_decrease", "real_increase", "real_decrease", "above_range", "below_range",
-)  # fmt: skip
+PRIORITY: tuple[FindingKind, ...] = get_args(FindingKind)  # most important first
+# Sentences said when there is no finding, or alongside them.
+OTHER_SENTENCES = ("to_check_one", "to_check", "stable", "partly_stable", "first_report", "not_compared")
 TREND: dict[str, FindingKind] = {"real_increase": "trend_increase", "real_decrease": "trend_decrease"}
 _CATALOG_ORDER = {test.code: index for index, test in enumerate(CATALOG.tests)}
 
 
-def slots(template: str) -> Counter[str] | None:
+def template_placeholders(template: str) -> Counter[str] | None:
     """The {placeholders} of a template and how often each appears; None if it has a digit or bad braces."""
     try:
         parsed = list(Formatter().parse(template))
@@ -64,29 +64,36 @@ class Templates(BaseModel):
     questions: dict[FindingKind, str]
     labels: dict[str, str]
 
-    @field_validator("sentences", "questions", "labels")
-    @classmethod
-    def _numbers_come_from_code(cls, templates: dict[str, str]) -> dict[str, str]:
-        for name, template in templates.items():
-            if slots(template) is None:
-                raise ValueError(f"template {name!r} has a digit or a malformed placeholder")
-        return templates
+    @model_validator(mode="after")
+    def _complete_and_numberless(self) -> "Templates":
+        required = {
+            "sentences": {*PRIORITY, *OTHER_SENTENCES},
+            "questions": set(PRIORITY),
+            "labels": {"ask_doctor"},
+        }
+        for section, names in required.items():
+            templates = getattr(self, section)
+            if missing := names - set(templates):
+                raise ValueError(f"[{section}] is missing {sorted(missing)}")
+            for name, template in templates.items():
+                if template_placeholders(template) is None:
+                    raise ValueError(f"[{section}] {name} has a digit or a malformed placeholder")
+        return self
 
     @classmethod
     def load(cls) -> "Templates":
-        with (settings.data_dir / "summary_mr.toml").open("rb") as file:
-            return cls.model_validate(tomllib.load(file))
+        return cls.model_validate(load_toml("summary_mr.toml"))
 
 
 TEMPLATES = Templates.load()
 
 
-def summarise(points: Iterable[TimelinePoint]) -> Summary:
+def summarize(points: Iterable[TimelinePoint]) -> Summary:
     """The summary of the latest report, judged against the same person's earlier results."""
-    points, others = _latest_persons(_known_tests(points))
+    points, others, left_out = _latest_persons(_known_tests(points))
     by_test = timelines(points)
     if not by_test:
-        return Summary(other_people=others)
+        return Summary(other_people=others, reports_left_out=left_out)
     changes = {code: timeline_changes(line, CATALOG.test(code)) for code, line in by_test.items()}
     latest_date = max(line[-1].sample_date for line in by_test.values())
     current = {code: line for code, line in by_test.items() if line[-1].sample_date == latest_date}
@@ -112,6 +119,7 @@ def summarise(points: Iterable[TimelinePoint]) -> Summary:
         to_check=to_check,
         changes=[change for test_changes in changes.values() for change in test_changes],
         other_people=others,
+        reports_left_out=left_out,
     )
 
 
@@ -128,24 +136,26 @@ def _known_tests(points: Iterable[TimelinePoint]) -> list[TimelinePoint]:
     return kept
 
 
-def _latest_persons(points: list[TimelinePoint]) -> tuple[list[TimelinePoint], list[str]]:
-    """The points of the person named on the latest report, and the other names left out.
+def _latest_persons(points: list[TimelinePoint]) -> tuple[list[TimelinePoint], list[str], int]:
+    """The points of the person named on the latest report, the other names, and how many
+    reports were left out.
 
     Until reports are matched to patients, printed names are compared ignoring case and
-    punctuation; a report without a name is kept.
+    punctuation. A report without a name could be anyone's: it is compared with nothing,
+    and when the latest report has no name, it stands alone.
     """
     if not points:
-        return [], []
+        return [], [], 0
     latest = max(points, key=lambda point: (point.sample_date, point.report_id))
-    person = normalise_name(latest.patient_name) if latest.patient_name else None
-    kept, others = [], {}
+    kept, others, left_out = [], set(), set()
     for point in points:
-        name = normalise_name(point.patient_name) if point.patient_name else None
-        if person is None or name is None or name == person:
+        if point.report_id == latest.report_id or same_name(point.patient_name, latest.patient_name):
             kept.append(point)
         else:
-            others.setdefault(name, point.patient_name)
-    return kept, sorted(others.values())
+            left_out.add(point.report_id)
+            if point.patient_name:
+                others.add(point.patient_name)
+    return kept, sorted(others), len(left_out)
 
 
 def _finding(timeline: list[TimelinePoint], changes: list[Change]) -> Finding | None:
@@ -210,32 +220,35 @@ def _quiet(current: dict[str, list[TimelinePoint]], changes: dict[str, list[Chan
     return "not_compared"
 
 
-def main(argv: list[str] | None = None) -> int:
-    configure_console()
-    parser = argparse.ArgumentParser(
-        prog="python -m app.summary",
-        description="The Marathi summary of the latest saved report and questions for the doctor.",
-    )
-    parser.add_argument("--json", action="store_true", help="print the summary, findings and changes as JSON")
-    args = parser.parse_args(argv)
-
+def _command(args: argparse.Namespace) -> int:
     with closing(db.connect()) as conn:
-        summary = summarise(db.timeline_points(conn))
-    if summary.other_people:
+        summary = summarize(db.timeline_points(conn))
+    if summary.reports_left_out:
+        names = f" ({', '.join(summary.other_people)})" if summary.other_people else ""
         logger.warning(
-            "Left out reports of %s: the summary is for the person on the latest report.",
-            ", ".join(summary.other_people),
+            "Left out %d earlier report(s) that name someone else or no one%s: "
+            "the summary is for the person named on the latest report.",
+            summary.reports_left_out,
+            names,
         )
     if args.json:
         print(summary.model_dump_json(indent=2))
     elif summary.latest_sample_date is None:
-        logger.info("No saved report has a sample date yet; extract one with python -m app.extract.")
+        logger.info("No saved report has a sample date yet; extract one with arogya-extract.")
     else:
         print("\n".join(summary.sentences))
         if summary.questions:
             print(f"\n{TEMPLATES.labels['ask_doctor']}")
             print("\n".join(f"- {question}" for question in summary.questions))
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = cli.parser(
+        "summary", "The Marathi summary of the latest saved report and questions for the doctor."
+    )
+    parser.add_argument("--json", action="store_true", help="print the summary, findings and changes as JSON")
+    return cli.run_command(parser, _command, argv)
 
 
 if __name__ == "__main__":

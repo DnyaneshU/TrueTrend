@@ -4,9 +4,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.lab_tests import CATALOG
-from app.models import Result
-from app.normalize import normalize, parse_range, parse_value
+from arogya_vahi.lab_tests import CATALOG
+from arogya_vahi.models import Result
+from arogya_vahi.normalize import normalize, parse_range, parse_value
 
 numbers = st.decimals(min_value=0, max_value=99_999, places=3, allow_nan=False, allow_infinity=False)
 spaces = st.sampled_from(["", " ", "  "])
@@ -14,6 +14,10 @@ spaces = st.sampled_from(["", " ", "  "])
 
 def result(code="HBA1C", value="7.2", unit="%", ref="4.0 - 5.6", name="HbA1c"):
     return Result(page=1, test_code=code, raw_name=name, value_text=value, unit=unit, ref_text=ref)
+
+
+def normalize_printed(printed):
+    return normalize(printed, CATALOG.test(printed.test_code))
 
 
 # ---------------------------------------------------------------- values
@@ -123,40 +127,42 @@ def test_ranges_that_are_not_one_normal_range_give_none(printed):
     ],
 )
 def test_values_are_converted_to_the_standard_unit(code, value, unit, standard):
-    normalized = normalize(result(code=code, value=value, unit=unit, ref=None))
+    normalized = normalize_printed(result(code=code, value=value, unit=unit, ref=None))
     assert normalized.value_std == pytest.approx(standard, abs=0.001)
     assert normalized.unit_std == CATALOG.test(code).unit
 
 
 def test_reference_range_is_converted_with_the_value():
-    normalized = normalize(result(code="VITD", value="150.00", unit="nmol/L", ref="75.00 - 250.00"))
+    normalized = normalize_printed(result(code="VITD", value="150.00", unit="nmol/L", ref="75.00 - 250.00"))
     assert (normalized.ref_low, normalized.ref_high) == pytest.approx((30.048, 100.160), abs=0.001)
 
 
 def test_printed_precision_is_kept():
-    assert normalize(result(code="TSH", value="0.8199", unit="microIU/mL", ref=None)).value_std == 0.8199
+    assert (
+        normalize_printed(result(code="TSH", value="0.8199", unit="microIU/mL", ref=None)).value_std == 0.8199
+    )
 
 
 def test_qualifier_is_kept():
-    normalized = normalize(result(code="B12", value="< 148", unit="pg/mL", ref="187 - 833"))
+    normalized = normalize_printed(result(code="B12", value="< 148", unit="pg/mL", ref="187 - 833"))
     assert (normalized.qualifier, normalized.value, normalized.value_std) == ("<", 148.0, 148.0)
 
 
 def test_unknown_unit_is_never_assumed():
-    normalized = normalize(result(code="HBA1C", value="7.2", unit="mg"))
+    normalized = normalize_printed(result(code="HBA1C", value="7.2", unit="mg"))
     assert normalized.value == 7.2
     assert (normalized.value_std, normalized.unit_std, normalized.ref_low) == (None, None, None)
     assert normalized.notes == ["unit 'mg' is not a known unit for HBA1C"]
 
 
 def test_missing_unit_is_never_assumed():
-    normalized = normalize(result(code="HBA1C", value="7.2", unit=None))
+    normalized = normalize_printed(result(code="HBA1C", value="7.2", unit=None))
     assert normalized.value_std is None
     assert normalized.notes == ["no unit printed"]
 
 
 def test_word_result_has_no_number():
-    normalized = normalize(result(code="HB", value="Not detected", unit="g/dL", ref=None))
+    normalized = normalize_printed(result(code="HB", value="Not detected", unit="g/dL", ref=None))
     assert (normalized.value, normalized.value_std) == (None, None)
     assert normalized.notes == ["value 'Not detected' is not a number"]
 
@@ -164,3 +170,12 @@ def test_word_result_has_no_number():
 def test_every_standard_unit_converts_one_to_one():
     for test in CATALOG.tests:
         assert test.conversion(test.unit).apply(7.25) == 7.25, test.code
+
+
+@pytest.mark.parametrize("printed", ["106 - 74", "1,000 - 200"])
+def test_a_range_whose_low_limit_is_above_its_high_one_is_not_a_range(printed):
+    assert parse_range(printed) is None
+
+
+def test_a_range_with_thousands_separators():
+    assert parse_range("1,000 - 2,500") == (1000.0, 2500.0)

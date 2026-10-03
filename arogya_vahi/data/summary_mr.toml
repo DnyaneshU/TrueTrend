@@ -1,4 +1,4 @@
-# The Marathi summary's sentences and doctor questions (app/summary.py).
+# The Marathi summary's sentences and doctor questions (arogya_vahi/summary.py).
 #
 # Every number is a {placeholder} that code fills from verified results, exactly as the
 # report prints them (Devanagari digits, with the printed unit), so a template must never

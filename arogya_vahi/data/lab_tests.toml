@@ -1,4 +1,4 @@
-# The MVP lab tests Arogya Vahi reads from reports, and the words labs print.
+# The lab tests Arogya Vahi reads from reports, and the words labs print.
 #
 # Editing this file changes what is extracted and how Gemma's answers are checked;
 # no code changes are needed.
@@ -22,7 +22,7 @@
 #              clinical thresholds.
 #   variation  { cvi, cva, between_lab_cv, source }: how much the result varies with no
 #              real change, as CVs in % (within-person, one lab's analytical, and between
-#              labs), for the Reference Change Value in app/change.py. Every number must
+#              labs), for the Reference Change Value in arogya_vahi/change.py. Every number must
 #              come from the cited source; leave the field out when none is known, and
 #              changes in that test are then not judged. CVa is EFLM's minimum standard,
 #              0.75 x CVi, for a lab's own precision is unknown: assuming a lab only just
@@ -31,10 +31,11 @@
 #              to CVa overstates the variation a little: two-lab changes are judged
 #              conservatively, never too eagerly.
 #
-# Conversion factors: glucose x 18.016, cholesterol x 38.67, triglycerides x 88.57,
-# creatinine / 88.4, 25-OH vitamin D / 2.496 and HbA1c IFCC -> NGSP (0.0915 x + 2.15)
-# are from the project brief; the others follow from molar masses: free T4 (776.9 g/mol)
-# x 0.0777, urea (60.06) x 6.006, uric acid (168.1) / 59.48, vitamin B12 (1355.4) x 1.355.
+# Conversion factors follow from molar masses: glucose (180.16 g/mol) x 18.016,
+# cholesterol (386.65) x 38.67, triglycerides (as triolein, 885.7) x 88.57, creatinine
+# (113.12) / 88.4, 25-OH vitamin D (400.64) / 2.496, free T4 (776.9) x 0.0777, urea
+# (60.06) x 6.006, uric acid (168.1) / 59.48, vitamin B12 (1355.4) x 1.355. HbA1c IFCC
+# mmol/mol -> NGSP % is the IFCC-NGSP master equation, 0.0915 x IFCC + 2.15.
 #
 # Names are compared after normalising spelling: case is ignored, punctuation becomes
 # a space, dotted abbreviations are joined ("T.S.H." = "TSH"), and letters are split
@@ -57,7 +58,7 @@ empty_words = ["null", "none", "n/a", "-"]
 normal_range_labels = ["normal", "desirable", "optimal", "reference", "ref", "reference range",
                        "biological reference interval", "bio ref interval", "adult", "adults"]
 
-# How results on one report are checked against each other (app/verify.py).
+# How results on one report are checked against each other (arogya_vahi/verify.py).
 [checks]
 # A part can't be more than its total: LDL and HDL are parts of total cholesterol.
 # When it is, both results are marked for checking.

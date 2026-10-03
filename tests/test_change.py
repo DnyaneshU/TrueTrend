@@ -4,14 +4,14 @@ import math
 from datetime import date
 
 import pytest
+from factories import timeline_point
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.change import judge, rcv_limits, timeline_changes, timelines
-from app.lab_tests import CATALOG, Variation
-from app.models import TimelinePoint
+from arogya_vahi.change import judge, rcv_limits, timeline_changes, timelines
+from arogya_vahi.lab_tests import CATALOG, Variation
 
-# Example constants for the tests only; real ones live in data/lab_tests.toml with their source.
+# Example constants for the tests only; real ones live in arogya_vahi/data/lab_tests.toml with their source.
 VARIATION = Variation(cvi=2.0, cva=1.0, between_lab_cv=3.0, source="test")
 HBA1C = CATALOG.test("HBA1C").model_copy(update={"variation": VARIATION})
 
@@ -28,14 +28,10 @@ CROSS_LAB = lognormal(math.hypot(math.hypot(1.0, 3.0), 2.0))
 
 
 def point(value, day=1, lab="Sunrise Diagnostics", report=None, **overrides):
-    fields = {
-        "result_id": day, "report_id": report or day, "patient_name": "Sunita Patil", "test_code": "HBA1C",
-        "sample_date": date(2026, 1, day), "lab_name": lab, "value_text": f"{value}", "value": value,
-        "unit": "%", "qualifier": None, "value_std": value, "unit_std": "%", "ref_text": "4.0 - 5.6",
-        "ref_low": 4.0, "ref_high": 5.6, "ref_verified": True, "status": "verified", "page": 1,
-        "file_path": "storage/a.pdf",
-    }  # fmt: skip
-    return TimelinePoint(**{**fields, **overrides})
+    """An HbA1c result on 2026-01-<day>."""
+    return timeline_point(
+        "HBA1C", value, date(2026, 1, day), lab_name=lab, report_id=report or day, **overrides
+    )
 
 
 # ---------------------------------------------------------------- the threshold

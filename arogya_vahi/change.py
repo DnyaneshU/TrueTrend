@@ -11,7 +11,7 @@ CV = √(CVa² + CVi²):
 
 For two different labs CVa is widened by the between-lab variation,
 CVa_eff = √(CVa² + between_lab_CV²). The CVs per test, with their sources, are in
-data/lab_tests.toml; a test without them is never judged.
+arogya_vahi/data/lab_tests.toml; a test without them is never judged.
 
 Only verified, exact values are compared; any other pair is `not_judged`, with why.
 """
@@ -20,8 +20,9 @@ import math
 from collections.abc import Iterable, Sequence
 from itertools import pairwise
 
-from app.lab_tests import LabTest, Variation, normalise_name
-from app.models import Change, TimelinePoint
+from arogya_vahi.lab_tests import LabTest, Variation
+from arogya_vahi.models import Change, TimelinePoint
+from arogya_vahi.text import same_name
 
 Z_95 = 1.96  # two-sided 95 %
 
@@ -63,7 +64,7 @@ def timeline_changes(points: Sequence[TimelinePoint], test: LabTest) -> list[Cha
 
 def judge(before: TimelinePoint, after: TimelinePoint, test: LabTest) -> Change:
     """Whether `after` differs from `before` by more than normal variation."""
-    same_lab = _same_lab(before.lab_name, after.lab_name)
+    same_lab = same_name(before.lab_name, after.lab_name)  # an unknown lab counts as a different one
     change = Change(before=before, after=after, kind="not_judged", same_lab=same_lab)
     if reason := _not_comparable(before, after):
         return change.model_copy(update={"reason": reason})
@@ -98,8 +99,3 @@ def _not_comparable(before: TimelinePoint, after: TimelinePoint) -> str | None:
     if before.value_std == 0:
         return "the earlier value is 0, so a change can't be expressed in %"
     return None
-
-
-def _same_lab(a: str | None, b: str | None) -> bool:
-    """Both names printed and equal ignoring case and punctuation; an unknown lab counts as different."""
-    return a is not None and b is not None and normalise_name(a) == normalise_name(b)

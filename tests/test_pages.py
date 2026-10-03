@@ -1,8 +1,8 @@
 import pymupdf
 import pytest
 
-from app.errors import ExtractError
-from app.pages import open_pdf, page_text, read_pages
+from arogya_vahi.errors import UserError
+from arogya_vahi.pages import open_pdf, page_text, read_pages
 
 
 def test_page_text_rebuilds_table_rows(make_pdf, report_page):
@@ -90,26 +90,26 @@ def test_read_pages_keeps_text_on_full_page_letterhead_as_text(report_page):
 
 
 def test_open_pdf_missing_file(tmp_path):
-    with pytest.raises(ExtractError, match="File not found"):
+    with pytest.raises(UserError, match="File not found"):
         open_pdf(tmp_path / "nope.pdf")
 
 
 def test_open_pdf_rejects_other_documents(tmp_path):
     notes = tmp_path / "notes.txt"
     notes.write_text("hello")
-    with pytest.raises(ExtractError, match="Not a PDF"):
+    with pytest.raises(UserError, match="Not a PDF"):
         open_pdf(notes)
 
 
 def test_open_pdf_rejects_corrupt_file(tmp_path):
     bad = tmp_path / "bad.pdf"
     bad.write_bytes(b"\x00\x01 this is not a pdf")
-    with pytest.raises(ExtractError, match="Not a readable PDF"):
+    with pytest.raises(UserError, match="Not a readable PDF"):
         open_pdf(bad)
 
 
 def test_open_pdf_rejects_password_protected(make_pdf, report_page):
-    with pytest.raises(ExtractError, match="password-protected"):
+    with pytest.raises(UserError, match="password-protected"):
         open_pdf(make_pdf([report_page], password="1234"))
 
 

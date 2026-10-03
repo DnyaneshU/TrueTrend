@@ -1,42 +1,25 @@
+"""SQLite storage: saving, replacing, migrating older databases, and reading timelines back."""
+
+import re
 import sqlite3
+import typing
 from contextlib import closing
 
 import pytest
+from factories import report_record, rows, saved_result
 
-from app import db
-from app.models import ReportRecord, SavedResult
-
-
-def make_report(sha256="abc123", **overrides):
-    # model_construct skips validation, so the database's own CHECK constraints are tested too
-    fields = {
-        "lab_name": None, "sample_date": None, "report_date": None, "source": "upload",
-        "file_path": "storage/originals/abc123.pdf", "sha256": sha256, "is_scanned": False,
-        "patient_name_raw": None, "patient_age_raw": None, "patient_sex_raw": None,
-        "extract_model": "gemma4:e4b", "extract_seconds": 1.0, "raw_json": "{}",
-    }  # fmt: skip
-    return ReportRecord.model_construct(**{**fields, **overrides})
+from arogya_vahi import db
+from arogya_vahi.config import settings
+from arogya_vahi.models import Source, Status
 
 
-def make_result(**overrides):
-    fields = {"page": 1, "test_code": "HBA1C", "raw_name": "HbA1c", "value_text": "7.2", "unit": "%",
-              "ref_text": "4.0 - 5.6", "notes": [], "bbox": None}  # fmt: skip
-    return SavedResult.model_construct(**{**fields, **overrides})
-
-
-@pytest.fixture
-def conn(tmp_path):
-    connection = db.connect(tmp_path / "test.db")
-    yield connection
-    connection.close()
-
-
-def test_connect_creates_tables(conn):
-    names = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+def test_connect_creates_tables_and_records_the_schema_version(conn):
+    names = {name for (name,) in rows(conn, "SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"patients", "reports", "results"} <= names
+    assert rows(conn, "PRAGMA user_version") == [(db.SCHEMA_VERSION,)]
 
 
-def test_connect_creates_missing_folder(tmp_path):
+def test_connect_creates_a_missing_folder(tmp_path):
     path = tmp_path / "new" / "folder" / "test.db"
     db.connect(path).close()
     assert path.exists()
@@ -45,22 +28,20 @@ def test_connect_creates_missing_folder(tmp_path):
 def test_save_report_and_find_it(conn):
     report_id = db.save_report(
         conn,
-        make_report(),
+        report_record(),
         [
-            make_result(status="verified", notes=[], bbox=(260.0, 141.0, 273.0, 153.0)),
-            make_result(test_code="HB", raw_name="Haemoglobin", value_text="12.1", notes=["a", "b"]),
+            saved_result("HBA1C", 7.2, bbox=(260.0, 141.0, 273.0, 153.0)),
+            saved_result("HB", 12.1, status="needs_check", notes=["a", "b"]),
         ],
     )
     assert db.find_report_id(conn, "abc123") == report_id
-    rows = conn.execute(
-        "SELECT test_code, status, check_notes, bbox_json, page FROM results WHERE report_id = ? ORDER BY id",
-        (report_id,),
-    ).fetchall()
-    assert [tuple(r) for r in rows] == [
-        ("HBA1C", "verified", None, "[260.0, 141.0, 273.0, 153.0]", 1),
-        ("HB", "needs_check", "a; b", None, 1),
+    assert rows(
+        conn, "SELECT test_code, raw_value_text, status, check_notes, bbox_json, page FROM results"
+    ) == [
+        ("HBA1C", "7.2", "verified", None, "[260.0, 141.0, 273.0, 153.0]", 1),
+        ("HB", "12.1", "needs_check", "a; b", None, 1),
     ]
-    assert conn.execute("SELECT created_at FROM reports").fetchone()[0]
+    assert rows(conn, "SELECT created_at IS NOT NULL FROM reports") == [(1,)]
 
 
 def test_find_report_id_unknown(conn):
@@ -68,77 +49,125 @@ def test_find_report_id_unknown(conn):
 
 
 def test_duplicate_sha256_rejected(conn):
-    db.save_report(conn, make_report(), [])
-    with pytest.raises(sqlite3.IntegrityError):
-        db.save_report(conn, make_report(), [])
+    db.save_report(conn, report_record(), [])
+    with pytest.raises(sqlite3.IntegrityError, match=r"reports.sha256"):
+        db.save_report(conn, report_record(), [])
 
 
 def test_replace_deletes_old_report_and_its_results(conn):
-    old_id = db.save_report(conn, make_report(), [make_result()])
-    new_id = db.save_report(conn, make_report(), [make_result(value_text="7.0")], replace=True)
+    old_id = db.save_report(conn, report_record(), [saved_result(value=7.2)])
+    new_id = db.save_report(conn, report_record(), [saved_result(value=7.0)], replace=True)
     assert new_id != old_id  # AUTOINCREMENT: ids are never reused
-    assert conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0] == 1
-    assert conn.execute("SELECT COUNT(*) FROM results WHERE report_id = ?", (old_id,)).fetchone()[0] == 0
-    assert conn.execute("SELECT raw_value_text FROM results").fetchone()[0] == "7.0"
+    assert rows(conn, "SELECT report_id, raw_value_text FROM results") == [(new_id, "7")]
 
 
 def test_failed_replace_keeps_old_report(conn):
-    old_id = db.save_report(conn, make_report(), [make_result()])
+    old_id = db.save_report(conn, report_record(), [saved_result()])
     with pytest.raises(sqlite3.IntegrityError):
-        db.save_report(conn, make_report(), [make_result(status="bogus")], replace=True)
+        db.save_report(conn, report_record(), [saved_result(construct=True, status="bogus")], replace=True)
     assert db.find_report_id(conn, "abc123") == old_id
-    assert conn.execute("SELECT COUNT(*) FROM results").fetchone()[0] == 1
-
-
-def test_unknown_source_rejected(conn):
-    with pytest.raises(sqlite3.IntegrityError):
-        db.save_report(conn, make_report(source="fax"), [])
-
-
-def test_connect_adds_columns_missing_from_an_older_database(tmp_path):
-    path = tmp_path / "old.db"
-    old = sqlite3.connect(path)
-    older_schema = db.SCHEMA
-    for column in ("    flag            TEXT,", "    qualifier       TEXT,"):
-        older_schema = older_schema.replace(column, "")
-    old.executescript(older_schema)  # a database made before `flag` and `qualifier`
-    old.close()
-    with closing(db.connect(path)) as conn:
-        columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
-        assert {"flag", "qualifier"} <= columns
-        db.save_report(conn, make_report(), [make_result(flag="H")])
+    assert rows(conn, "SELECT COUNT(*) FROM results") == [(1,)]
 
 
 @pytest.mark.filterwarnings("ignore:Pydantic serializer warnings")  # the invalid value is the point
-def test_is_scanned_must_be_0_or_1(conn):
+@pytest.mark.parametrize("overrides", [{"source": "fax"}, {"is_scanned": 2}])
+def test_the_database_enforces_its_own_constraints(conn, overrides):
     with pytest.raises(sqlite3.IntegrityError):
-        db.save_report(conn, make_report(is_scanned=2), [])
+        db.save_report(conn, report_record(construct=True, **overrides), [])
 
 
-def test_stored_paths_are_repo_relative_and_resolve_back(tmp_path):
-    inside = db.ROOT / "storage" / "originals" / "abc.pdf"
-    assert db.stored_path(inside) == "storage/originals/abc.pdf"
-    assert db.resolve_stored_path("storage/originals/abc.pdf") == inside
-    outside = tmp_path / "abc.pdf"  # AROGYA_STORAGE_DIR outside the repo
-    assert db.resolve_stored_path(db.stored_path(outside)) == outside.resolve()
+@pytest.mark.parametrize("name, literal", [("status", Status), ("source", Source)])
+def test_schema_checks_match_the_models(name, literal):
+    allowed = re.search(rf"CHECK \({name} IN \(([^)]*)\)\)", db.SCHEMA)[1]
+    assert set(re.findall(r"'(\w+)'", allowed)) == set(typing.get_args(literal))
+
+
+def test_printed_results_and_update(conn):
+    report_id = db.save_report(conn, report_record(), [saved_result("TG", 168.0, flag="H", ref_text="< 150")])
+    ((result_id, printed),) = db.printed_results(conn, report_id)
+    assert (printed.test_code, printed.value_text, printed.flag, printed.ref_text) == (
+        "TG",
+        "168",
+        "H",
+        "< 150",
+    )
+    with conn:
+        db.update_result(conn, result_id, saved_result("TG", 170.0, status="needs_check", notes=["x"]))
+    assert rows(conn, "SELECT raw_value_text, status, check_notes FROM results") == [
+        ("170", "needs_check", "x")
+    ]
+    assert db.saved_reports(conn) == [(report_id, "abc123.pdf")]
+
+
+# ---------------------------------------------------------------- older databases
+
+
+def older_database(path, *, without=("flag", "qualifier", "ref_verified")):
+    schema = db.SCHEMA
+    for column in without:
+        schema = re.sub(rf"\n    {column} [^\n]*", "", schema)
+    with closing(sqlite3.connect(path)) as old:
+        old.executescript(schema)
+        old.execute(
+            "INSERT INTO reports (source, file_path, sha256) "
+            "VALUES ('upload', 'storage/originals/a.pdf', 'a')"
+        )
+        old.execute(
+            "INSERT INTO results (report_id, test_code, raw_name, raw_value_text, page) "
+            "VALUES (1, 'TG', 'Triglyceride', 'H 168.0', 1)"
+        )
+        old.commit()
+
+
+def test_an_older_database_is_migrated_once(tmp_path):
+    path = tmp_path / "old.db"
+    older_database(path)
+    with closing(db.connect(path)) as conn:
+        columns = {name for (_, name, *_) in rows(conn, "PRAGMA table_info(results)")}
+        assert {"flag", "qualifier", "ref_verified"} <= columns
+        # results saved before flags were split out had them in the value text
+        assert rows(conn, "SELECT raw_value_text, flag, ref_verified FROM results") == [("168.0", "H", 0)]
+        assert rows(conn, "PRAGMA user_version") == [(db.SCHEMA_VERSION,)]
+    with closing(db.connect(path)) as again:  # nothing left to do
+        assert rows(again, "SELECT raw_value_text FROM results") == [("168.0",)]
+
+
+def test_paths_saved_by_older_versions_still_resolve(tmp_path):
+    assert db.resolve_stored_path("storage/originals/abc.pdf") == settings.originals_dir / "abc.pdf"
+    outside = tmp_path / "abc.pdf"  # an absolute path, from AROGYA_STORAGE_DIR outside the repo
+    assert db.resolve_stored_path(str(outside)) == outside
+
+
+def test_stored_paths_survive_moving_the_storage_folder(tmp_path, monkeypatch):
+    recorded = db.stored_path(settings.originals_dir / "abc.pdf")
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "moved")
+    assert db.resolve_stored_path(recorded) == settings.originals_dir / "abc.pdf"
+    assert db.resolve_stored_path(recorded).parent.parent.name == "moved"
+
+
+# ---------------------------------------------------------------- timelines
 
 
 def test_timeline_points_are_dated_results_oldest_first_without_rejected_ones(conn):
-    db.save_report(conn, make_report("b", sample_date="2026-04-15"), [make_result(value_text="7.4")])
     db.save_report(
         conn,
-        make_report("a", sample_date="2026-01-15", patient_name_raw="Sunita Patil"),
-        [make_result(value_text="7.0"), make_result(test_code="HB", status="rejected")],
+        report_record(sha256="b", sample_date="2026-04-15", patient_name_raw=None),
+        [saved_result(value=7.4)],
     )
-    db.save_report(conn, make_report("c"), [make_result(value_text="9.9")])  # no sample date
+    db.save_report(
+        conn,
+        report_record(sha256="a", sample_date="2026-01-15"),
+        [saved_result(value=7.0), saved_result("HB", 12.0, status="rejected")],
+    )
+    db.save_report(conn, report_record(sha256="c"), [saved_result(value=9.9)])  # no sample date
     points = db.timeline_points(conn)
     assert [(p.sample_date.isoformat(), p.value_text, p.patient_name) for p in points] == [
-        ("2026-01-15", "7.0", "Sunita Patil"),
+        ("2026-01-15", "7", "Sunita Patil"),
         ("2026-04-15", "7.4", None),
     ]
 
 
 def test_timeline_points_of_one_patient(conn):
-    db.save_report(conn, make_report("a", sample_date="2026-01-15"), [make_result()])
+    db.save_report(conn, report_record(sample_date="2026-01-15"), [saved_result()])
     assert db.timeline_points(conn, patient_id=1) == []
     assert len(db.timeline_points(conn)) == 1

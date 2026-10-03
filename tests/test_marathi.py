@@ -3,7 +3,7 @@ from datetime import date
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app import marathi
+from arogya_vahi import marathi
 
 ASCII = str.maketrans("०१२३४५६७८९", "0123456789")
 
@@ -16,7 +16,8 @@ def test_digits_change_and_nothing_else():
 def test_a_number_reads_back_as_the_same_value(value):
     shown = marathi.number(value)
     assert not any(char in "0123456789" for char in shown)
-    assert float(shown.translate(ASCII)) == float(f"{value:g}")
+    assert float(shown.translate(ASCII)) == round(value, 6)
+    assert "e" not in shown  # never "१.२e+०६"
 
 
 def test_numbers_drop_trailing_zeros():

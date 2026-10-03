@@ -1,12 +1,15 @@
+import hashlib
 import json
+import sqlite3
 from contextlib import closing
 
 import pytest
+from factories import report_record
 
-from app import db, gemma
-from app.errors import ExtractError
-from app.extract import main, run
-from app.models import PageExtraction
+from arogya_vahi import cli, db, gemma
+from arogya_vahi.errors import UserError
+from arogya_vahi.extract import main, run
+from arogya_vahi.models import PageExtraction
 
 GOOD_REPLY = {
     "patient_name": "Mrs. Sunita Patil",
@@ -141,7 +144,11 @@ def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page)
     assert (vitd.value, vitd.value_std, vitd.unit_std) == (150.0, 60.0962, "ng/mL")
     assert (vitd.ref_low, vitd.ref_high) == (30.0481, 100.16)
     assert (b12.flag, b12.qualifier, b12.value_std) == ("L", "<", 148.0)
-    assert (hba1c.value_std, hba1c.notes) == (None, ["unit 'mg' is not a known unit for HBA1C"])
+    assert hba1c.value_std is None
+    assert hba1c.notes == [
+        "unit 'mg' is not a known unit for HBA1C",
+        "unit 'mg' is not printed in the value's row",  # the PDF prints %
+    ]
     assert [result.status for result in out.results] == ["needs_check"] * 3
     assert query(
         "SELECT test_code, value, qualifier, value_std, unit_std, ref_low, ref_high, check_notes "
@@ -151,12 +158,13 @@ def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page)
          "150.00 is not printed on page 1 in a row naming Vitamin D (25-OH)"),
         ("B12", 148.0, "<", 148.0, "pg/mL", 187.0, 833.0,
          "< 148 is not printed on page 1 in a row naming Vitamin B12"),
-        ("HBA1C", 7.2, None, None, None, None, None, "unit 'mg' is not a known unit for HBA1C"),
+        ("HBA1C", 7.2, None, None, None, None, None,
+         "unit 'mg' is not a known unit for HBA1C; unit 'mg' is not printed in the value's row"),
     ]  # fmt: skip
 
 
 def test_same_file_twice_is_skipped_without_calling_gemma(storage, fake_gemma, make_pdf, report_page, caplog):
-    caplog.set_level("INFO", logger="app")
+    caplog.set_level("INFO", logger="arogya_vahi")
     pdf = make_pdf([report_page])
     run(pdf)
     calls = len(fake_gemma.pages)
@@ -178,7 +186,7 @@ def test_missing_date_and_no_tests_are_warnings_not_errors(storage, use_gemma, m
     use_gemma(FakeGemma(first=EMPTY_REPLY))
     out = run(make_pdf([report_page]))
     assert any("No sample collection date" in w for w in out.warnings)
-    assert any("No MVP tests" in w for w in out.warnings)
+    assert any("None of the supported tests was found" in w for w in out.warnings)
     assert query("SELECT COUNT(*) FROM reports") == [(1,)]
 
 
@@ -190,11 +198,50 @@ def test_unreadable_date_is_a_warning(storage, use_gemma, make_pdf, report_page)
 
 
 def test_sample_date_in_the_future_is_a_warning(storage, use_gemma, make_pdf, report_page):
-    # e.g. a misread year; it would otherwise sit at the end of the timeline unnoticed
+    # e.g. a mistyped year; it would otherwise sit at the end of the timeline unnoticed
+    page = [
+        item if not item[2].startswith("Collected") else (50, 100, "Collected : 12/09/2096")
+        for item in report_page
+    ]
     use_gemma(FakeGemma(first={**GOOD_REPLY, "sample_date": "12/09/2096"}))
-    out = run(make_pdf([report_page]))
+    out = run(make_pdf([page]))
     assert out.sample_date == "2096-09-12"
     assert any("2096-09-12 is in the future" in w for w in out.warnings)
+
+
+def test_a_sample_date_not_printed_in_the_pdf_is_not_used(storage, use_gemma, make_pdf, report_page):
+    # Gemma's reading alone can't place a report on the timeline: the date is said aloud
+    use_gemma(FakeGemma(first={**GOOD_REPLY, "sample_date": "12/08/2026 08:10"}))
+    out = run(make_pdf([report_page]))
+    assert (out.sample_date, out.sample_date_text) == (None, "12/08/2026 08:10")
+    assert any("is not printed in the PDF's text" in w for w in out.warnings)
+    assert query("SELECT sample_date FROM reports") == [(None,)]
+
+
+def test_the_original_is_stored_whole_even_over_a_damaged_copy(storage, fake_gemma, make_pdf, report_page):
+    pdf = make_pdf([report_page])
+    sha256 = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    stored = storage / "originals" / f"{sha256}.pdf"
+    stored.parent.mkdir(parents=True)
+    stored.write_bytes(b"%PDF-1.7 half a file")  # left by a crash in an older version
+    run(pdf)
+    assert stored.read_bytes() == pdf.read_bytes()
+    assert not list(stored.parent.glob("*.part"))
+    assert query("SELECT file_path FROM reports") == [(f"{sha256}.pdf",)]
+
+
+def test_a_report_saved_by_another_run_meanwhile_is_a_clear_error(storage, use_gemma, make_pdf, report_page):
+    pdf = make_pdf([report_page])
+
+    class AnotherRunSavesFirst(FakeGemma):
+        def ask(self, page, model, retry=False):
+            with closing(db.connect()) as conn:
+                db.save_report(conn, report_record(sha256=hashlib.sha256(pdf.read_bytes()).hexdigest()), [])
+            return super().ask(page, model, retry)
+
+    use_gemma(AnotherRunSavesFirst())
+    with pytest.raises(UserError, match="Another run saved this report"):
+        run(pdf)
 
 
 def test_scanned_page_is_transcribed_and_marks_the_report(storage, fake_gemma, make_pdf, report_page):
@@ -208,13 +255,13 @@ def test_ollama_failing_mid_report_saves_nothing(storage, use_gemma, make_pdf, r
     class FailsOnPage2(FakeGemma):
         def ask(self, page, model, retry=False):
             if page.number == 2:
-                raise ExtractError(
+                raise UserError(
                     "Lost the connection to Ollama while reading the report. Is it still running?"
                 )
             return super().ask(page, model, retry)
 
     use_gemma(FailsOnPage2())
-    with pytest.raises(ExtractError):
+    with pytest.raises(UserError):
         run(make_pdf([report_page, report_page]))
     assert query("SELECT COUNT(*) FROM reports") == [(0,)]
 
@@ -270,3 +317,34 @@ def test_main_ctrl_c_saves_nothing(storage, use_gemma, make_pdf, report_page, ca
     assert main([str(make_pdf([report_page]))]) == 130
     assert "Cancelled" in capsys.readouterr().err
     assert query("SELECT COUNT(*) FROM reports") == [(0,)]
+
+
+def test_main_passes_model_and_force(storage, fake_gemma, make_pdf, report_page, capsys):
+    pdf = make_pdf([report_page])
+    assert main([str(pdf), "--model", "gemma4:e2b"]) == 0
+    assert json.loads(capsys.readouterr().out)["model"] == "gemma4:e2b"
+    assert main([str(pdf), "--force"]) == 0
+    assert json.loads(capsys.readouterr().out)["model"] == "gemma4:e4b"
+    assert query("SELECT COUNT(*) FROM reports") == [(1,)]
+
+
+@pytest.mark.parametrize(
+    "error, message",
+    [
+        (
+            sqlite3.OperationalError("database is locked"),
+            "error: The database could not be used (database is locked)",
+        ),
+        (
+            sqlite3.DatabaseError("file is not a database"),
+            "error: The database file is damaged or not a database",
+        ),
+        (OSError(28, "No space left on device"), "error: A file could not be read or written"),
+    ],
+)
+def test_commands_report_storage_problems_in_one_line(error, message, capsys):
+    def command(args):
+        raise error
+
+    assert cli.run_command(cli.parser("extract", "test"), command, []) == cli.EXIT_ERROR
+    assert capsys.readouterr().err.strip().startswith(message)

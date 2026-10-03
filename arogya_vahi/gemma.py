@@ -1,4 +1,4 @@
-"""Calls to local Gemma through Ollama: transcribing scans, and picking the MVP tests
+"""Calls to local Gemma through Ollama: transcribing scans, and picking the supported tests
 out of a page's text with the reply held to a JSON schema.
 
 Scans are read in two steps. Asked to read the image, pick the tests and fill the
@@ -6,52 +6,47 @@ schema all at once, Gemma returned 2 of 6 tests on a scanned page; asked only to
 transcribe it, it read every line, and the text step then found all 6.
 """
 
-from importlib import resources
+from functools import cache
 from string import Template
 
 import httpx
 import ollama
 
-from app.config import settings
-from app.errors import ExtractError
-from app.lab_tests import CATALOG
-from app.models import PageExtraction, PageInput
+from arogya_vahi.config import settings
+from arogya_vahi.errors import UserError
+from arogya_vahi.lab_tests import CATALOG
+from arogya_vahi.models import PageExtraction, PageInput
+from arogya_vahi.resources import read_text
 
 PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
-
-
-def _prompt(name: str) -> str:
-    return resources.files("app").joinpath("prompts", name).read_text(encoding="utf-8").rstrip("\n")
-
-
-SYSTEM_PROMPT = Template(_prompt("extract_page.txt")).substitute(
+SYSTEM_PROMPT = Template(read_text("prompts", "extract_page.txt").rstrip("\n")).substitute(
     test_list="\n".join(f"  {test.code:<6} = {test.prompt}" for test in CATALOG.tests),
     exclusions=", ".join(CATALOG.prompt_exclusions),
 )
-TRANSCRIBE_PROMPT = _prompt("transcribe_page.txt")
+TRANSCRIBE_PROMPT = read_text("prompts", "transcribe_page.txt").rstrip("\n")
 
 
 def transcribe(page: PageInput, model: str) -> str:
     """Gemma reads a scanned page's image into plain text, line by line."""
     response = _chat(
         model=model,
-        options=settings.ollama_options(),
+        options=_options(),
         messages=[{"role": "user", "content": TRANSCRIBE_PROMPT, "images": [page.image]}],
     )
     return response.message.content
 
 
 def extract_results(page: PageInput, model: str, retry: bool = False) -> PageExtraction:
-    """Gemma picks the MVP tests out of one page's text (a scan's transcription for vision pages).
+    """Gemma picks the supported tests out of one page's text (a scan's transcription for vision pages).
 
     Raises pydantic.ValidationError if the reply does not fit the schema, and
-    ExtractError if Ollama is unreachable, the model is missing or the connection drops.
+    UserError if Ollama is unreachable, the model is missing or the connection drops.
     """
     if not page.text:
         raise ValueError(f"page {page.number} has no text; transcribe scanned pages first")
     response = _chat(
         model=model,
-        options=settings.ollama_options(retry),
+        options=_options(retry),
         format=PAGE_SCHEMA,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -61,19 +56,33 @@ def extract_results(page: PageInput, model: str, retry: bool = False) -> PageExt
     return PageExtraction.model_validate_json(response.message.content)
 
 
+def _options(retry: bool = False) -> dict[str, float | int]:
+    return {
+        "temperature": settings.retry_temperature if retry else settings.temperature,
+        "num_ctx": settings.num_ctx,
+        "num_predict": settings.num_predict,
+    }
+
+
+@cache
+def _client() -> ollama.Client:
+    """The Ollama client for settings.ollama_host; OLLAMA_HOST in the environment is ignored."""
+    return ollama.Client(host=settings.ollama_host)
+
+
 def _chat(model: str, **request) -> ollama.ChatResponse:
-    """ollama.chat with thinking off, and Ollama problems turned into one-sentence ExtractErrors."""
+    """A chat with thinking off, and Ollama problems turned into one-sentence UserErrors."""
     try:
-        return ollama.chat(model=model, think=False, **request)
+        return _client().chat(model=model, think=False, **request)
     except ConnectionError:
-        raise ExtractError(
+        raise UserError(
             "Can't reach Ollama. Start the Ollama app (or run: ollama serve) and try again."
         ) from None
     except ollama.ResponseError as error:
         if error.status_code == 404:
-            raise ExtractError(f"Model {model} is not installed. Run: ollama pull {model}") from None
-        raise ExtractError(f"Ollama error: {error.error}") from None
+            raise UserError(f"Model {model} is not installed. Run: ollama pull {model}") from None
+        raise UserError(f"Ollama error: {error.error}") from None
     except httpx.TransportError:
-        raise ExtractError(
+        raise UserError(
             "Lost the connection to Ollama while reading the report. Is it still running?"
         ) from None

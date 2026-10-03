@@ -2,27 +2,20 @@
 
 import pymupdf
 import pytest
+from factories import table
 from hypothesis import given
 from hypothesis import strategies as st
 
-from app.lab_tests import CATALOG
-from app.models import Result
-from app.verify import printed_number, verify_results
+from arogya_vahi.lab_tests import CATALOG
+from arogya_vahi.models import Result
+from arogya_vahi.text import QUALIFIERS, printed_number
+from arogya_vahi.verify import verify_results
 
 DEVANAGARI = str.maketrans("0123456789", "०१२३४५६७८९")
 
 
-def result(code, value, unit, name="as Gemma named it", page=1):
-    return Result(page=page, test_code=code, raw_name=name, value_text=value, unit=unit)
-
-
-def table(*rows):
-    """A page with one printed row per (name, value, unit), 20 points apart."""
-    items = []
-    for number, (name, value, unit) in enumerate(rows):
-        y = 100 + 20 * number
-        items += [(50, y, name), (260, y, value), (320, y, unit)]
-    return items
+def result(code, value, unit, name="as Gemma named it", page=1, ref=None):
+    return Result(page=page, test_code=code, raw_name=name, value_text=value, unit=unit, ref_text=ref)
 
 
 @pytest.fixture
@@ -129,7 +122,7 @@ def test_a_page_number_outside_the_pdf_needs_a_check(verify, report_page):
 def test_a_printed_value_cell_reads_back(number, decimals, qualifier, suffix, devanagari):
     digits = f"{number:.{decimals}f}"
     printed = qualifier + (digits.translate(DEVANAGARI) if devanagari else digits) + suffix
-    assert printed_number(printed) == float(digits), printed
+    assert printed_number(printed) == (QUALIFIERS.get(qualifier), float(digits)), printed
 
 
 @pytest.mark.parametrize("printed", ["4.0-5.6", "B12", "H", "25(OH)", "1.2.3", "mg/dL", "", "<"])
@@ -156,6 +149,53 @@ def test_a_one_sided_range_is_verified_by_its_one_limit(verify):
     (chol,) = verify([page], Result(page=1, test_code="CHOL", raw_name="Cholesterol", value_text="189",
                                     unit="mg/dL", ref_text="Desirable : <200"))  # fmt: skip
     assert chol.ref_verified and chol.ref_high == 200.0
+
+
+def test_a_value_printed_as_a_limit_is_never_verified_as_exact(verify):
+    # the PDF prints "< 148"; Gemma dropped the "<"
+    page = [(50, 100, "Vitamin B12"), (200, 100, "<"), (210, 100, "148"), (260, 100, "pg/mL")]
+    exact, limit = verify([page], result("B12", "148", "pg/mL"), result("B12", "< 148", "pg/mL"))
+    assert (exact.status, limit.status) == ("needs_check", "verified")
+
+
+def test_a_qualifier_gemma_added_is_not_verified(verify, report_page):
+    (hba1c,) = verify([report_page], result("HBA1C", "< 7.2", "%"))
+    assert hba1c.status == "needs_check"
+
+
+def test_a_unit_not_printed_in_the_row_needs_a_check(verify):
+    # 30.0 ng/mL read as nmol/L would be saved as 12.0 ng/mL, still within believable limits
+    page = table(("25-OH Vitamin D", "30.0", "ng/mL"))
+    right, wrong = verify([page], result("VITD", "30.0", "ng/mL"), result("VITD", "30.0", "nmol/L"))
+    assert (right.status, wrong.status) == ("verified", "needs_check")
+    assert wrong.notes == ["unit 'nmol/L' is not printed in the value's row"]
+
+
+def test_a_unit_printed_with_the_value_counts(verify):
+    (hba1c,) = verify([[(50, 100, "HbA1c"), (260, 100, "7.2%")]], result("HBA1C", "7.2", "%"))
+    assert hba1c.status == "verified"
+
+
+def test_a_number_in_a_sentence_is_not_a_value_even_in_a_short_row(verify):
+    page = [(50, 100, "Interpretation: HbA1c >= 6.5 Diabetes")]
+    (hba1c,) = verify([page], result("HBA1C", ">= 6.5", "%"))
+    assert hba1c.status == "needs_check"
+
+
+def test_the_value_itself_does_not_verify_its_range(verify):
+    # a hallucinated range "4.0 - 6.8" next to the value 6.8: only 6.8 is printed in the row
+    (hba1c,) = verify([table(("HbA1c", "6.8", "%"))], result("HBA1C", "6.8", "%", ref="6.8 - 9.0"))
+    assert hba1c.status == "verified" and not hba1c.ref_verified
+
+
+def test_each_page_is_read_once_for_all_its_results(verify, report_page, monkeypatch):
+    from arogya_vahi import verify as module
+
+    calls = []
+    original = module.page_rows
+    monkeypatch.setattr(module, "page_rows", lambda page: calls.append(page.number) or original(page))
+    verify([report_page], result("HBA1C", "7.2", "%"), result("HB", "12.1", "g/dL"))
+    assert calls == [0]
 
 
 # ---------------------------------------------------------------- believable values and units
@@ -253,7 +293,7 @@ def test_values_below_a_detection_limit_are_left_out_of_cross_checks(verify):
 
 
 def test_cross_checks_use_the_catalogs_units():
-    # the formulas in app.verify are written in mg/dL and %
+    # the formulas in arogya_vahi.verify are written in mg/dL and %
     assert {code: CATALOG.test(code).unit for code in ("CHOL", "HDL", "TG", "LDL", "GLU_F")} == dict.fromkeys(
         ("CHOL", "HDL", "TG", "LDL", "GLU_F"), "mg/dL"
     )
