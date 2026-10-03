@@ -11,6 +11,7 @@ from arogya_vahi.text import Qualifier
 PageMode = Literal["text", "vision"]
 Status = Literal["verified", "needs_check", "rejected"]
 Source = Literal["whatsapp", "gmail", "upload", "gmail_import"]  # how a report arrived
+Sex = Literal["F", "M"]
 
 
 class PageInput(BaseModel):
@@ -135,12 +136,13 @@ class ReportRecord(BaseModel):
     file_path: str
     sha256: str
     is_scanned: bool
-    patient_name_raw: str | None  # as printed; matched to a patient later
+    patient_name_raw: str | None  # as printed
     patient_age_raw: str | None
     patient_sex_raw: str | None
     extract_model: str
     extract_seconds: float
     raw_json: str  # Gemma's reply for every page
+    patient_id: int | None = None  # who the report is for (arogya_vahi.patients); None: no one yet
 
 
 class ReportOutput(BaseModel):
@@ -151,6 +153,7 @@ class ReportOutput(BaseModel):
     sha256: str
     model: str
     seconds: float
+    patient_id: int | None  # None when the report names no one, or could be more than one patient
     patient_name: str | None
     age: str | None
     sex: str | None
@@ -164,6 +167,32 @@ class ReportOutput(BaseModel):
     results: list[SavedResult]
 
 
+# --- Patients: the family members reports are for.
+
+
+class Patient(BaseModel):
+    """A row of the patients table."""
+
+    id: int
+    display_name: str
+    aliases: list[str] = Field(default_factory=list)  # other names printed on their reports
+    sex: Sex | None = None
+    birth_year: int | None = None  # estimated from an age printed on a report: +/- 1 year
+
+
+class ReportPerson(BaseModel):
+    """Who a saved report says it is for, as printed, and who it was matched to."""
+
+    report_id: int
+    patient_id: int | None
+    name: str | None
+    age: str | None
+    sex: str | None
+    sample_date: str | None  # ISO YYYY-MM-DD
+    report_date: str | None
+    lab_name: str | None
+
+
 # --- Timelines and changes between reports.
 
 
@@ -172,6 +201,7 @@ class TimelinePoint(BaseModel):
 
     result_id: int
     report_id: int
+    patient_id: int | None  # None: the report isn't matched to anyone
     patient_name: str | None  # as printed on the report
     test_code: str
     sample_date: date

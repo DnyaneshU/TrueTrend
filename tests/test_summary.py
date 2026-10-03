@@ -234,16 +234,16 @@ def test_tests_missing_from_the_latest_report_are_not_summarised():
 
 
 def test_another_persons_reports_are_left_out():
-    father = timeline_point("HBA1C", 9.0, JAN, patient_name="Mr. Ramesh Patil")
+    father = timeline_point("HBA1C", 9.0, JAN, patient_id=2, patient_name="Mr. Ramesh Patil")
     summary = summarize([father, timeline_point("HBA1C", 7.0, APR, patient_name="SUNITA PATIL.")])
     assert (summary.other_people, summary.reports_left_out) == (["Mr. Ramesh Patil"], 1)
     assert summary.changes == [] and summary.sentences == [sentence("first_report")]
 
 
-@pytest.mark.parametrize("earlier, latest", [(None, "Sunita Patil"), ("Sunita Patil", None)])
-def test_a_report_without_a_name_is_compared_with_nothing(earlier, latest):
-    earlier_point = timeline_point("HBA1C", 5.2, JAN, patient_name=earlier)
-    summary = summarize([earlier_point, timeline_point("HBA1C", 9.1, APR, patient_name=latest)])
+@pytest.mark.parametrize("earlier, latest", [(None, 1), (1, None)])
+def test_a_report_matched_to_no_one_is_compared_with_nothing(earlier, latest):
+    earlier_point = timeline_point("HBA1C", 5.2, JAN, patient_id=earlier)
+    summary = summarize([earlier_point, timeline_point("HBA1C", 9.1, APR, patient_id=latest)])
     assert summary.changes == [] and summary.reports_left_out == 1
 
 
@@ -331,7 +331,7 @@ def test_main_warns_about_reports_left_out(conn, caplog):
     save(conn, "a", "2026-01-15", saved_result("HBA1C", 9.0), patient="Ramesh Patil")
     save(conn, "b", "2026-04-15", saved_result("HBA1C", 7.0))
     assert main([]) == 0
-    assert "Left out 1 earlier report(s) that name someone else or no one (Ramesh Patil)" in caplog.text
+    assert "Left out 1 earlier report(s) for someone else or no one (Ramesh Patil)" in caplog.text
 
 
 def test_main_with_nothing_saved_says_how_to_start(capsys, caplog):

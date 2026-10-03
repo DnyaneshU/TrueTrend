@@ -5,8 +5,9 @@
 
 Pages are read by arogya_vahi.pages, Gemma is called by arogya_vahi.gemma, the answers
 are merged by arogya_vahi.pipeline, and each result is normalised and checked against
-the PDF by arogya_vahi.verify. This module stores the original, saves the report to
-SQLite and prints it as JSON.
+the PDF by arogya_vahi.verify, and the report is matched to a family member by
+arogya_vahi.patients. This module stores the original, saves the report to SQLite and
+prints it as JSON.
 """
 
 import argparse
@@ -22,11 +23,11 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from arogya_vahi import cli, db, gemma
+from arogya_vahi import cli, db, gemma, patients
 from arogya_vahi.config import settings
 from arogya_vahi.dates import parse_date
 from arogya_vahi.errors import UserError
-from arogya_vahi.models import Extraction, PageInput, ReportOutput, ReportRecord, SavedResult
+from arogya_vahi.models import Extraction, PageInput, ReportOutput, ReportPerson, ReportRecord, SavedResult
 from arogya_vahi.pages import open_pdf, read_pages
 from arogya_vahi.pipeline import DATE_FIELDS, extract_pages
 from arogya_vahi.text import plural
@@ -75,13 +76,16 @@ def run(
 
     dates, warnings = _dates(extraction, pages)
     record = _record(extraction, dates, pages, stored, sha256, model, seconds)
-    report_id = _save(record, results, db_path, replace=force)
+    report_id, patient_id, patient_note = _save(record, results, db_path, replace=force)
+    if patient_note:
+        warnings.append(patient_note)
     for warning in warnings:
         logger.warning(warning)
     verified = sum(result.status == "verified" for result in results)
     logger.info(
-        "Saved report #%d: %s, %d verified against the PDF, %d to check; %s s.",
-        report_id, plural(len(results), "result"), verified, len(results) - verified, seconds,
+        "Saved report #%d%s: %s, %d verified against the PDF, %d to check; %s s.",
+        report_id, f" for patient #{patient_id}" if patient_id else "", plural(len(results), "result"),
+        verified, len(results) - verified, seconds,
     )  # fmt: skip
     header = extraction.header
     return ReportOutput(
@@ -90,6 +94,7 @@ def run(
         sha256=sha256,
         model=model,
         seconds=seconds,
+        patient_id=patient_id,
         patient_name=header.patient_name,
         age=header.age,
         sex=header.sex,
@@ -184,16 +189,46 @@ def _record(
     )
 
 
-def _save(record: ReportRecord, results: list[SavedResult], db_path: Path | None, replace: bool) -> int:
+def _save(
+    record: ReportRecord, results: list[SavedResult], db_path: Path | None, replace: bool
+) -> tuple[int, int | None, str | None]:
+    """Save the report for the patient it names: (report id, patient id, a note about the patient).
+
+    A report read again stays with the patient it was for, who may have been set by hand.
+    The patient and the report are saved in one transaction.
+    """
     try:
         with closing(db.connect(db_path)) as conn:
-            return db.save_report(conn, record, results, replace=replace)
+            patient_id = db.report_patient_id(conn, record.sha256) if replace else None
+            note = None
+            if patient_id is None:
+                match = patients.match_report(conn, _person(record))
+                patient_id, note = (match.patient.id if match.patient else None), match.note
+                if match.new:
+                    logger.info("New patient #%d: %s.", match.patient.id, match.patient.display_name)
+            report_id = db.save_report(
+                conn, record.model_copy(update={"patient_id": patient_id}), results, replace=replace
+            )
+            return report_id, patient_id, note
     except sqlite3.IntegrityError as error:
         if "reports.sha256" not in str(error):
             raise
         raise UserError(
             "Another run saved this report while it was being read. Nothing new was saved."
         ) from None
+
+
+def _person(record: ReportRecord) -> ReportPerson:
+    return ReportPerson(
+        report_id=0,
+        patient_id=None,
+        name=record.patient_name_raw,
+        age=record.patient_age_raw,
+        sex=record.patient_sex_raw,
+        sample_date=record.sample_date,
+        report_date=record.report_date,
+        lab_name=record.lab_name,
+    )
 
 
 def _store_original(data: bytes, sha256: str, originals_dir: Path) -> Path:

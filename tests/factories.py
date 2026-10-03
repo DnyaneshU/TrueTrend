@@ -52,7 +52,8 @@ def timeline_point(
     high=None,
     **overrides,
 ) -> TimelinePoint:
-    """A verified result on a timeline: from Sunrise Diagnostics, for Sunita Patil, in the standard unit.
+    """A verified result on a timeline: from Sunrise Diagnostics, for Sunita Patil (patient #1), in the
+    standard unit.
 
     low/high give a verified normal range, printed as it reads ("4 - 5.6", "< 200", "> 40").
     """
@@ -67,7 +68,8 @@ def timeline_point(
         ref_text = None
     report_id = overrides.pop("report_id", when.toordinal())
     fields = {
-        "result_id": next(_ids), "report_id": report_id, "patient_name": "Sunita Patil", "test_code": code,
+        "result_id": next(_ids), "report_id": report_id, "patient_id": 1, "patient_name": "Sunita Patil",
+        "test_code": code,
         "sample_date": when, "lab_name": "Sunrise Diagnostics", "value_text": f"{value:g}", "value": value,
         "unit": unit, "qualifier": None, "value_std": value, "unit_std": unit, "ref_text": ref_text,
         "ref_low": low, "ref_high": high, "ref_verified": ref_text is not None, "status": "verified",

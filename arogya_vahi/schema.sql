@@ -2,9 +2,9 @@
 CREATE TABLE IF NOT EXISTS patients (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     display_name  TEXT NOT NULL,
-    aliases_json  TEXT NOT NULL DEFAULT '[]',
-    sex           TEXT,
-    birth_year    INTEGER
+    aliases_json  TEXT NOT NULL DEFAULT '[]',  -- other names printed on their reports
+    sex           TEXT,                        -- 'F' or 'M'
+    birth_year    INTEGER                      -- estimated from a printed age, +/- 1 year
 );
 
 CREATE TABLE IF NOT EXISTS reports (
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS reports (
     sha256            TEXT NOT NULL UNIQUE,
     is_scanned        INTEGER NOT NULL DEFAULT 0 CHECK (is_scanned IN (0, 1)),
     created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-    patient_name_raw  TEXT,                 -- as printed; patient_id is set once matching exists
+    patient_name_raw  TEXT,                 -- as printed; patient_id is who it was matched to
     patient_age_raw   TEXT,
     patient_sex_raw   TEXT,
     extract_model     TEXT,
@@ -52,3 +52,4 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_report ON results(report_id);
 CREATE INDEX IF NOT EXISTS idx_results_test ON results(test_code);
+CREATE INDEX IF NOT EXISTS idx_reports_patient ON reports(patient_id);

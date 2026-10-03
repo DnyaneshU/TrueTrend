@@ -132,6 +132,16 @@ def test_an_older_database_is_migrated_once(tmp_path):
         assert rows(again, "SELECT raw_value_text FROM results") == [("168.0",)]
 
 
+def test_a_version_1_database_gets_the_patient_index(tmp_path):
+    path = tmp_path / "v1.db"
+    with closing(sqlite3.connect(path)) as old:
+        old.executescript(db.SCHEMA.replace("CREATE INDEX IF NOT EXISTS idx_reports_patient", "-- "))
+        old.execute("PRAGMA user_version = 1")
+    with closing(db.connect(path)) as conn:
+        indexes = {name for (name,) in rows(conn, "SELECT name FROM sqlite_master WHERE type = 'index'")}
+        assert "idx_reports_patient" in indexes
+
+
 def test_paths_saved_by_older_versions_still_resolve(tmp_path):
     assert db.resolve_stored_path("storage/originals/abc.pdf") == settings.originals_dir / "abc.pdf"
     outside = tmp_path / "abc.pdf"  # an absolute path, from AROGYA_STORAGE_DIR outside the repo

@@ -1,6 +1,8 @@
 """Command line: the Marathi summary of the latest report, made by rules over verified results.
 
-    arogya-summary [--json]        (or: python -m arogya_vahi.summary)
+    arogya-summary [--patient N] [--json]        (or: python -m arogya_vahi.summary)
+
+It is for the patient the latest report is for, or for patient N (arogya-patients lists them).
 
 At most 3 sentences, most important first, and for each finding a question for the doctor:
 
@@ -24,13 +26,13 @@ from typing import get_args
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from arogya_vahi import cli, db, marathi
+from arogya_vahi import cli, db, marathi, patients
 from arogya_vahi.change import timeline_changes, timelines
+from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.models import Change, Finding, FindingKind, Summary, TimelinePoint
 from arogya_vahi.normalize import parse_range
 from arogya_vahi.resources import load_toml
-from arogya_vahi.text import same_name
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ TEMPLATES = Templates.load()
 
 
 def summarize(points: Iterable[TimelinePoint]) -> Summary:
-    """The summary of the latest report, judged against the same person's earlier results."""
+    """The summary of the latest report, judged against the same patient's earlier results."""
     points, others, left_out = _latest_persons(_known_tests(points))
     by_test = timelines(points)
     if not by_test:
@@ -137,19 +139,19 @@ def _known_tests(points: Iterable[TimelinePoint]) -> list[TimelinePoint]:
 
 
 def _latest_persons(points: list[TimelinePoint]) -> tuple[list[TimelinePoint], list[str], int]:
-    """The points of the person named on the latest report, the other names, and how many
-    reports were left out.
+    """The points of the patient the latest report is for, the names on the other reports,
+    and how many reports were left out.
 
-    Until reports are matched to patients, printed names are compared ignoring case and
-    punctuation. A report without a name could be anyone's: it is compared with nothing,
-    and when the latest report has no name, it stands alone.
+    A report matched to no one (it names no one, or could be more than one patient) is
+    compared with nothing, and when it is the latest report, it stands alone.
     """
     if not points:
         return [], [], 0
     latest = max(points, key=lambda point: (point.sample_date, point.report_id))
     kept, others, left_out = [], set(), set()
     for point in points:
-        if point.report_id == latest.report_id or same_name(point.patient_name, latest.patient_name):
+        same_patient = latest.patient_id is not None and point.patient_id == latest.patient_id
+        if point.report_id == latest.report_id or same_patient:
             kept.append(point)
         else:
             left_out.add(point.report_id)
@@ -222,12 +224,15 @@ def _quiet(current: dict[str, list[TimelinePoint]], changes: dict[str, list[Chan
 
 def _command(args: argparse.Namespace) -> int:
     with closing(db.connect()) as conn:
-        summary = summarize(db.timeline_points(conn))
+        patients.log_matches(patients.match_unmatched(conn))
+        if args.patient is not None and args.patient not in {patient.id for patient in db.patients(conn)}:
+            raise UserError(f"There is no patient #{args.patient}; see them with arogya-patients.")
+        summary = summarize(db.timeline_points(conn, args.patient))
     if summary.reports_left_out:
         names = f" ({', '.join(summary.other_people)})" if summary.other_people else ""
         logger.warning(
-            "Left out %d earlier report(s) that name someone else or no one%s: "
-            "the summary is for the person named on the latest report.",
+            "Left out %d earlier report(s) for someone else or no one%s: "
+            "the summary is for the patient the latest report is for.",
             summary.reports_left_out,
             names,
         )
@@ -248,6 +253,9 @@ def main(argv: list[str] | None = None) -> int:
         "summary", "The Marathi summary of the latest saved report and questions for the doctor."
     )
     parser.add_argument("--json", action="store_true", help="print the summary, findings and changes as JSON")
+    parser.add_argument(
+        "--patient", type=int, help="the summary of this patient's latest report (see arogya-patients)"
+    )
     return cli.run_command(parser, _command, argv)
 
 

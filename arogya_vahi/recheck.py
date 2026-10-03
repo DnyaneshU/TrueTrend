@@ -4,7 +4,7 @@
 
 Run it after editing the catalog (names, units, believable limits) or after updating
 the app: each result is rebuilt from what was printed and saved, and checked against
-the report's stored original PDF.
+the report's stored original PDF. Reports not matched to a patient yet are matched.
 """
 
 import argparse
@@ -15,7 +15,7 @@ from contextlib import closing, nullcontext
 
 import pymupdf
 
-from arogya_vahi import cli, db
+from arogya_vahi import cli, db, patients
 from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.pages import open_pdf
@@ -60,6 +60,7 @@ def _open_original(report_id: int, file_path: str) -> pymupdf.Document | None:
 def _command(args: argparse.Namespace) -> int:
     with closing(db.connect()) as conn:
         total, verified = recheck(conn)
+        patients.log_matches(patients.match_unmatched(conn))
     logger.info("Re-checked %d saved results: %d verified, %d to check.", total, verified, total - verified)
     return 0
 
