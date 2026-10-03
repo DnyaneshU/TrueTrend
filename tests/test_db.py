@@ -5,7 +5,6 @@ import pytest
 
 from app import db
 from app.models import ReportRecord, SavedResult
-from app.normalize import renormalize
 
 
 def make_report(sha256="abc123", **overrides):
@@ -21,7 +20,7 @@ def make_report(sha256="abc123", **overrides):
 
 def make_result(**overrides):
     fields = {"page": 1, "test_code": "HBA1C", "raw_name": "HbA1c", "value_text": "7.2", "unit": "%",
-              "ref_text": "4.0 - 5.6"}  # fmt: skip
+              "ref_text": "4.0 - 5.6", "notes": [], "bbox": None}  # fmt: skip
     return SavedResult.model_construct(**{**fields, **overrides})
 
 
@@ -48,18 +47,18 @@ def test_save_report_and_find_it(conn):
         conn,
         make_report(),
         [
-            make_result(),
-            make_result(test_code="HB", raw_name="Haemoglobin", value_text="12.1"),
+            make_result(status="verified", notes=[], bbox=(260.0, 141.0, 273.0, 153.0)),
+            make_result(test_code="HB", raw_name="Haemoglobin", value_text="12.1", notes=["a", "b"]),
         ],
     )
     assert db.find_report_id(conn, "abc123") == report_id
     rows = conn.execute(
-        "SELECT test_code, status, check_notes, page FROM results WHERE report_id = ? ORDER BY id",
+        "SELECT test_code, status, check_notes, bbox_json, page FROM results WHERE report_id = ? ORDER BY id",
         (report_id,),
     ).fetchall()
     assert [tuple(r) for r in rows] == [
-        ("HBA1C", "needs_check", "not verified yet", 1),
-        ("HB", "needs_check", "not verified yet", 1),
+        ("HBA1C", "verified", None, "[260.0, 141.0, 273.0, 153.0]", 1),
+        ("HB", "needs_check", "a; b", None, 1),
     ]
     assert conn.execute("SELECT created_at FROM reports").fetchone()[0]
 
@@ -110,46 +109,15 @@ def test_connect_adds_columns_missing_from_an_older_database(tmp_path):
         db.save_report(conn, make_report(), [make_result(flag="H")])
 
 
-def test_renormalize_recomputes_every_saved_result(conn):
-    db.save_report(
-        conn,
-        make_report(),
-        [
-            make_result(
-                test_code="VITD",
-                raw_name="Vitamin D",
-                value_text="150",
-                unit="nmol/L",
-                ref_text="75 - 250",
-            )
-        ],
-    )
-    assert renormalize(conn) == 1
-    row = conn.execute("SELECT value, value_std, unit_std, ref_low, ref_high FROM results").fetchone()
-    assert tuple(row) == (150.0, 60.0962, "ng/mL", 30.0481, 100.16)
-
-
-def test_renormalize_splits_a_flag_saved_inside_the_value(conn):
-    # rows saved before flags were split out have "H 168.0" as their value text
-    db.save_report(
-        conn,
-        make_report(),
-        [
-            make_result(
-                test_code="TG",
-                raw_name="Triglyceride",
-                value_text="H 168.0",
-                unit="mg/dL",
-                ref_text="<150",
-            )
-        ],
-    )
-    renormalize(conn)
-    row = conn.execute("SELECT raw_value_text, flag, value, value_std, ref_high FROM results").fetchone()
-    assert tuple(row) == ("168.0", "H", 168.0, 168.0, 150.0)
-
-
 @pytest.mark.filterwarnings("ignore:Pydantic serializer warnings")  # the invalid value is the point
 def test_is_scanned_must_be_0_or_1(conn):
     with pytest.raises(sqlite3.IntegrityError):
         db.save_report(conn, make_report(is_scanned=2), [])
+
+
+def test_stored_paths_are_repo_relative_and_resolve_back(tmp_path):
+    inside = db.ROOT / "storage" / "originals" / "abc.pdf"
+    assert db.stored_path(inside) == "storage/originals/abc.pdf"
+    assert db.resolve_stored_path("storage/originals/abc.pdf") == inside
+    outside = tmp_path / "abc.pdf"  # AROGYA_STORAGE_DIR outside the repo
+    assert db.resolve_stored_path(db.stored_path(outside)) == outside.resolve()

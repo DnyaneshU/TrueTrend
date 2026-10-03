@@ -95,8 +95,8 @@ def test_run_saves_report_and_returns_output(storage, fake_gemma, make_pdf, repo
     assert out.pages[0].mode == "text"
     assert out.warnings == []
     assert [(r.test_code, r.value_text, r.status) for r in out.results] == [
-        ("HBA1C", "7.2", "needs_check"),
-        ("HB", "12.1", "needs_check"),
+        ("HBA1C", "7.2", "verified"),
+        ("HB", "12.1", "verified"),
     ]
 
     (report,) = query(
@@ -110,8 +110,8 @@ def test_run_saves_report_and_returns_output(storage, fake_gemma, make_pdf, repo
     assert query(
         "SELECT test_code, raw_value_text, flag, page, status, check_notes FROM results ORDER BY id"
     ) == [
-        ("HBA1C", "7.2", None, 1, "needs_check", "not verified yet"),
-        ("HB", "12.1", None, 1, "needs_check", "not verified yet"),
+        ("HBA1C", "7.2", None, 1, "verified", None),
+        ("HB", "12.1", None, 1, "verified", None),
     ]
     assert (storage / "originals" / f"{out.sha256}.pdf").read_bytes() == pdf.read_bytes()
 
@@ -150,23 +150,17 @@ def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page)
     assert (vitd.ref_low, vitd.ref_high) == (30.0481, 100.16)
     assert (b12.flag, b12.qualifier, b12.value_std) == ("L", "<", 148.0)
     assert (hba1c.value_std, hba1c.notes) == (None, ["unit 'mg' is not a known unit for HBA1C"])
+    assert [result.status for result in out.results] == ["needs_check"] * 3
     assert query(
         "SELECT test_code, value, qualifier, value_std, unit_std, ref_low, ref_high, check_notes "
         "FROM results ORDER BY id"
     ) == [
-        ("VITD", 150.0, None, 60.0962, "ng/mL", 30.0481, 100.16, "not verified yet"),
-        ("B12", 148.0, "<", 148.0, "pg/mL", 187.0, 833.0, "not verified yet"),
-        (
-            "HBA1C",
-            7.2,
-            None,
-            None,
-            None,
-            None,
-            None,
-            "not verified yet; unit 'mg' is not a known unit for HBA1C",
-        ),
-    ]
+        ("VITD", 150.0, None, 60.0962, "ng/mL", 30.0481, 100.16,
+         "150.00 is not printed on page 1 in a row naming Vitamin D (25-OH)"),
+        ("B12", 148.0, "<", 148.0, "pg/mL", 187.0, 833.0,
+         "< 148 is not printed on page 1 in a row naming Vitamin B12"),
+        ("HBA1C", 7.2, None, None, None, None, None, "unit 'mg' is not a known unit for HBA1C"),
+    ]  # fmt: skip
 
 
 def test_same_file_twice_is_skipped_without_calling_gemma(storage, fake_gemma, make_pdf, report_page, caplog):

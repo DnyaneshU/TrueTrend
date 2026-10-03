@@ -3,8 +3,8 @@
     python -m app.extract path/to/report.pdf [--force] [--model gemma4:e2b]
 
 Pages are read by app.pages, Gemma is called by app.gemma, the answers are merged by
-app.pipeline and turned into numbers by app.normalize. This module stores the
-original, saves the report to SQLite and prints it as JSON.
+app.pipeline, and each result is normalised and checked against the PDF by app.verify.
+This module stores the original, saves the report to SQLite and prints it as JSON.
 """
 
 import argparse
@@ -19,15 +19,15 @@ from datetime import date
 from pathlib import Path
 
 from app import db, gemma
-from app.config import ROOT, settings
+from app.config import settings
 from app.console import configure_console
 from app.dates import parse_date
 from app.errors import ExtractError
-from app.models import Extraction, ReportOutput, ReportRecord, SavedResult
-from app.normalize import normalize
+from app.models import Extraction, ReportOutput, ReportRecord
 from app.pages import open_pdf, read_pages
 from app.pipeline import DATE_FIELDS, extract_pages
 from app.text import plural
+from app.verify import verify_results
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +71,14 @@ def run(
     header = extraction.header
     dates = {name: parse_date(getattr(header, name)) for name in DATE_FIELDS}
     warnings = extraction.warnings + _report_warnings(extraction, dates)
-    results = [
-        SavedResult(**result.model_dump(), **normalize(result).model_dump()) for result in extraction.results
-    ]
+    stored = _store_original(pdf_path, sha256, originals_dir or settings.originals_dir)
+    with open_pdf(stored) as doc:  # verified against the stored copy: exactly the bytes hashed
+        results = verify_results(extraction.results, doc)
     record = ReportRecord(
         lab_name=header.lab_name,
         sample_date=dates["sample_date"],
         report_date=dates["report_date"],
-        file_path=_repo_relative(_store_original(pdf_path, sha256, originals_dir or settings.originals_dir)),
+        file_path=db.stored_path(stored),
         sha256=sha256,
         is_scanned=any(page.mode == "vision" for page in pages),
         patient_name_raw=header.patient_name,
@@ -95,7 +95,11 @@ def run(
 
     for warning in warnings:
         logger.warning(warning)
-    logger.info("Saved report #%d: %s, %s s.", report_id, plural(len(results), "result"), seconds)
+    verified = sum(result.status == "verified" for result in results)
+    logger.info(
+        "Saved report #%d: %s, %d verified against the PDF, %d to check; %s s.",
+        report_id, plural(len(results), "result"), verified, len(results) - verified, seconds,
+    )  # fmt: skip
     return ReportOutput(
         report_id=report_id,
         file=str(pdf_path),
@@ -147,14 +151,6 @@ def _store_original(pdf_path: Path, sha256: str, originals_dir: Path) -> Path:
     if not stored.exists():
         shutil.copyfile(pdf_path, stored)
     return stored
-
-
-def _repo_relative(path: Path) -> str:
-    """How a stored file is recorded in the DB: relative to the repo root when inside it."""
-    try:
-        return path.resolve().relative_to(ROOT).as_posix()
-    except ValueError:
-        return str(path.resolve())
 
 
 def main(argv: list[str] | None = None) -> int:

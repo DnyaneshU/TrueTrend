@@ -65,6 +65,7 @@ class LabTest(BaseModel):
     not_names: tuple[str, ...] = ()
     unit: str  # the standard unit
     units: dict[str, Conversion]  # normalised printed unit -> conversion to the standard unit
+    plausible: tuple[float, float]  # believable limits in the standard unit, far wider than normal
 
     @field_validator("names", "not_names")
     @classmethod
@@ -81,23 +82,28 @@ class LabTest(BaseModel):
         }
 
     @model_validator(mode="after")
-    def _standard_unit_is_identity(self) -> "LabTest":
+    def _check(self) -> "LabTest":
         if self.units.get(normalise_unit(self.unit)) != Conversion():
             raise ValueError(f"{self.code}: its standard unit {self.unit!r} must be listed with factor 1")
+        low, high = self.plausible
+        if not 0 <= low < high:
+            raise ValueError(f"{self.code}: plausible must be [low, high] with 0 <= low < high")
         return self
 
     def conversion(self, printed_unit: str | None) -> Conversion | None:
         """How to turn a value in `printed_unit` into the standard unit, or None if the unit is unknown."""
         return self.units.get(normalise_unit(printed_unit)) if printed_unit else None
 
+    def is_named_by(self, printed_name: str) -> bool:
+        """True when a printed name contains one of this test's names and none of its look-alikes."""
+        name = normalise_name(printed_name)
+        return any(_contains(name, p) for p in self.names) and not any(
+            _contains(name, p) for p in self.not_names
+        )
+
     def conflict(self, raw_name: str) -> str | None:
         """Why the printed name can't be this test, or None if it fits."""
-        name = normalise_name(raw_name)
-        if any(_contains(name, p) for p in self.names) and not any(
-            _contains(name, p) for p in self.not_names
-        ):
-            return None
-        return f"'{raw_name}' is not {self.code}"
+        return None if self.is_named_by(raw_name) else f"'{raw_name}' is not {self.code}"
 
 
 class ReportVocabulary(BaseModel):
@@ -113,18 +119,33 @@ class ReportVocabulary(BaseModel):
         return frozenset(word.casefold() for word in words)
 
 
+class CrossChecks(BaseModel):
+    """How results of one report are checked against each other (see app.verify)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    parts_of: dict[str, tuple[str, ...]]  # each listed test can't be more than its total
+    friedewald_max_tg: float
+    friedewald_tolerance: float
+    adag_tolerance: float
+
+
 class Catalog(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     tests: tuple[LabTest, ...] = Field(min_length=1)
     prompt_exclusions: tuple[str, ...]
     report: ReportVocabulary
+    checks: CrossChecks
 
     @model_validator(mode="after")
-    def _unique_codes(self) -> "Catalog":
+    def _known_codes(self) -> "Catalog":
         codes = [test.code for test in self.tests]
         if len(codes) != len(set(codes)):
             raise ValueError(f"duplicate test codes in the catalog: {codes}")
+        named = set(self.checks.parts_of).union(*self.checks.parts_of.values())
+        if unknown := named - set(codes):
+            raise ValueError(f"checks.parts_of names unknown test codes: {sorted(unknown)}")
         return self
 
     @classmethod

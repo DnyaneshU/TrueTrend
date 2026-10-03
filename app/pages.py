@@ -15,7 +15,9 @@ from app.models import PageInput
 WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS & ~pymupdf.TEXT_PRESERVE_LIGATURES
 
 
-class _Word(NamedTuple):
+class Word(NamedTuple):
+    """A word printed on the page and its box, in PDF points from the top left."""
+
     x0: float
     y0: float
     x1: float
@@ -25,6 +27,11 @@ class _Word(NamedTuple):
     @property
     def centre(self) -> float:
         return (self.y0 + self.y1) / 2
+
+    @property
+    def bbox(self) -> tuple[float, float, float, float]:
+        """The box to a tenth of a point, plenty for highlighting it."""
+        return round(self.x0, 1), round(self.y0, 1), round(self.x1, 1), round(self.y1, 1)
 
 
 def open_pdf(path: Path) -> pymupdf.Document:
@@ -55,7 +62,7 @@ def read_pages(doc: pymupdf.Document) -> list[PageInput]:
     pages = []
     for number, page in enumerate(doc, start=1):
         text = page_text(page)
-        if _looks_scanned(page, text):
+        if looks_scanned(page, text):
             pages.append(PageInput(number=number, total=doc.page_count, mode="vision", image=_render(page)))
         else:
             pages.append(PageInput(number=number, total=doc.page_count, mode="text", text=text))
@@ -71,15 +78,27 @@ def _render(page: pymupdf.Page) -> bytes:
 def page_text(page: pymupdf.Page) -> str:
     """The page's text rebuilt one printed line at a time.
 
-    Words whose vertical centres are within half a text height form one line,
-    read left to right. A gap wider than settings.column_gap × text height becomes " | ",
-    so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
+    Cells are separated by " | ", so a table row reads "HbA1c | 6.8 | % | 4.0 - 5.6".
     """
-    words = [_Word(*word[:5]) for word in page.get_text("words", flags=WORD_FLAGS)]
+    return "\n".join(
+        " | ".join(" ".join(word.text for word in cell) for cell in row) for row in page_rows(page)
+    )
+
+
+Cell = list[Word]
+
+
+def page_rows(page: pymupdf.Page) -> list[list[Cell]]:
+    """The page's printed lines, top to bottom, each split into cells read left to right.
+
+    Words whose vertical centres are within half a text height form one line, and a
+    gap wider than settings.column_gap × text height starts a new cell.
+    """
+    words = [Word(*word[:5]) for word in page.get_text("words", flags=WORD_FLAGS)]
     if not words:
-        return ""
+        return []
     height = statistics.median(word.y1 - word.y0 for word in words) or 1.0
-    lines: list[list[_Word]] = []
+    lines: list[list[Word]] = []
     line_centre = 0.0
     for word in sorted(words, key=lambda word: (word.centre, word.x0)):
         if lines and word.centre - line_centre <= height / 2:
@@ -87,19 +106,20 @@ def page_text(page: pymupdf.Page) -> str:
         else:
             lines.append([word])
             line_centre = word.centre
-    return "\n".join(_join_line(sorted(line), height) for line in lines)
+    return [_cells(sorted(line), settings.column_gap * height) for line in lines]
 
 
-def _join_line(words: list[_Word], height: float) -> str:
-    """One line's words, left to right, with " | " wherever the gap is a column break."""
-    parts = [words[0].text]
-    for previous, word in pairwise(words):
-        parts.append(" | " if word.x0 - previous.x1 > settings.column_gap * height else " ")
-        parts.append(word.text)
-    return "".join(parts)
+def _cells(line: list[Word], column_gap: float) -> list[Cell]:
+    cells = [[line[0]]]
+    for previous, word in pairwise(line):
+        if word.x0 - previous.x1 > column_gap:
+            cells.append([word])
+        else:
+            cells[-1].append(word)
+    return cells
 
 
-def _looks_scanned(page: pymupdf.Page, text: str) -> bool:
+def looks_scanned(page: pymupdf.Page, text: str) -> bool:
     """True when the page's content is in an image rather than in its text."""
     visible = len("".join(text.split()))
     if visible < settings.scan_text_threshold:

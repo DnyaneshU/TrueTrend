@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     max_image_side: int = 2000  # pixels; huge photo-to-PDF pages are rendered smaller
     column_gap: float = 0.6  # a gap wider than this × text height separates table columns
 
+    # Verifying
+    max_label_words: int = 8  # a longer "label" left of a number is a sentence, not a test name
+
     # Files
     storage_dir: Path = ROOT / "storage"  # gitignored: the database and stored original PDFs
     data_dir: Path = ROOT / "data"  # the lab test catalog

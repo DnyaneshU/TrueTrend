@@ -4,8 +4,9 @@ Keeps a family's lab reports in one place and builds one timeline per test acros
 using Gemma 4 running locally through Ollama. Reports never leave the laptop.
 
 > **Status:** the extraction command works. It reads a report PDF, converts each result to
-> numbers in a standard unit, and saves it to a local SQLite database. Every value is marked `needs_check` until the
-> verification step is built.
+> numbers in a standard unit, checks it against the PDF, and saves it to a local SQLite
+> database. A result is `verified` only when code finds it printed in its test's row and it
+> passes the checks below; anything else is `needs_check`, with notes saying why.
 
 ## Setup (Windows, PowerShell)
 
@@ -25,10 +26,12 @@ ollama pull gemma4:e4b
 - `--force` re-extracts a report that is already saved.
 - `--model gemma4:e2b` uses the smaller, faster model.
 
-After editing units or names in the catalog, re-normalise everything already saved:
+After editing the catalog (names, units, believable limits) or updating the app, re-check
+everything already saved. Gemma is not called; each result is rebuilt from what was printed
+and checked against the stored original:
 
 ```powershell
-.venv\Scripts\python -m app.normalize
+.venv\Scripts\python -m app.recheck
 ```
 
 Each run stores the original PDF in `storage/originals/<sha256>.pdf` and the report and
@@ -49,14 +52,23 @@ its results in `storage/arogya.db`.
 - **Checks in code, not in the model:** page numbers and dates (read day-first, never
   guessed) come from code, and a row whose printed name contradicts its test code (for
   example "Estimated Average Glucose" filed as fasting glucose) is dropped with a warning.
+- **Verifying:** code looks for each value in the PDF's own text, never in Gemma's reading
+  of it. The value must be printed as a word of its own in a row whose label names the
+  test, so a number from the neighbouring row, the reference range or a paragraph is not
+  accepted; where it is found is saved (`bbox_json`) for highlighting later. The value must
+  also be in a known unit and within the test's believable limits (69 % HbA1c is a dropped
+  decimal point), and LDL and HDL can't exceed total cholesterol. Values on scanned pages
+  have no PDF text to check against, so they always need a check. Two further checks only
+  add a note: LDL against the Friedewald estimate, and HbA1c's average glucose (ADAG)
+  against fasting glucose.
 
 ## Configuration
 
 | What | Where |
 |---|---|
-| The tests that are extracted, the names labs print for them, look-alike tests to reject, standard units and unit conversions | `data/lab_tests.toml` |
+| The tests that are extracted, the names labs print for them, look-alike tests to reject, standard units, unit conversions, believable limits, and the cross-test checks | `data/lab_tests.toml` |
 | The instructions sent to Gemma | `app/prompts/` |
-| Model, Ollama options, page-reading thresholds, storage folder | `app/config.py`, overridable with `AROGYA_*` environment variables or a `.env` file, e.g. `AROGYA_MODEL=gemma4:e2b` |
+| Model, Ollama options, page-reading and verification thresholds, storage folder | `app/config.py`, overridable with `AROGYA_*` environment variables or a `.env` file, e.g. `AROGYA_MODEL=gemma4:e2b` |
 
 Changing the catalog or prompts needs no code changes.
 
@@ -69,8 +81,10 @@ Changing the catalog or prompts needs no code changes.
 | `app/lab_tests.py` | Loads the test catalog; checks a printed name against a test code |
 | `app/dates.py` | Reads printed dates |
 | `app/normalize.py` | Values, units and normal ranges as numbers in standard units |
+| `app/verify.py` | Each result checked against the PDF, its believable limits and the report's other results |
 | `app/pipeline.py` | Merges the pages' answers into one report |
 | `app/extract.py` | The command: stores the original, saves to SQLite, prints JSON |
+| `app/recheck.py` | The command that re-normalises and re-verifies everything saved |
 | `app/models.py` | The data passed between steps, saved, and printed (Pydantic models) |
 | `app/db.py`, `app/schema.sql` | SQLite storage |
 | `app/config.py`, `app/text.py`, `app/console.py`, `app/errors.py` | Settings, shared text helpers, console output, user-facing errors |
