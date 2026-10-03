@@ -10,6 +10,10 @@ with notes saying why:
   limits (data/lab_tests.toml).
 - It is not more than a total it is part of (LDL and HDL are parts of total cholesterol).
 
+The lab's normal range is checked separately: `ref_verified` is true only when every
+limit read from it is printed in the value's own row. Only a verified range is used to
+say a result is outside it.
+
 Two cross-checks only add a note and never change the status: the lab's LDL against
 the Friedewald estimate, and HbA1c's average glucose (ADAG) against fasting glucose.
 """
@@ -24,8 +28,8 @@ import pymupdf
 from app.config import settings
 from app.lab_tests import CATALOG, LabTest
 from app.models import Result, SavedResult
-from app.normalize import normalize
-from app.pages import Cell, looks_scanned, page_rows, page_text
+from app.normalize import normalize, parse_range
+from app.pages import Cell, Word, looks_scanned, page_rows, page_text
 from app.text import NUMBER, QUALIFIER, to_float
 
 # A word that is one value: "7.2", "<148", "7.2%", "13.6*"; not a range, nor a name like "B12".
@@ -41,6 +45,7 @@ class _Check:
     problems: list[str] = field(default_factory=list)  # each keeps the result at needs_check
     notes: list[str] = field(default_factory=list)  # for information only
     bbox: BBox | None = None
+    ref_verified: bool = False
 
     @property
     def amount(self) -> float | None:
@@ -67,6 +72,7 @@ def verify_results(results: Sequence[Result], doc: pymupdf.Document | None) -> l
                 "status": "needs_check" if check.problems else "verified",
                 "notes": check.problems + check.notes,
                 "bbox": check.bbox,
+                "ref_verified": check.ref_verified,
             }
         )
         for check in checks
@@ -87,9 +93,13 @@ def _check(result: Result, doc: pymupdf.Document | None) -> _Check:
         problems=list(normalized.notes),
     )
     if normalized.value is not None:
-        check.bbox, problem = _find_on_page(doc, result, normalized.value, check.test)
+        found, problem = _find_on_page(doc, result, normalized.value, check.test)
         if problem:
             check.problems.append(problem)
+        else:
+            word, row = found
+            check.bbox = word.bbox
+            check.ref_verified = _range_printed(row, result.ref_text)
     low, high = check.test.plausible
     if check.amount is not None and not low <= check.amount <= high:
         check.problems.append(
@@ -101,8 +111,8 @@ def _check(result: Result, doc: pymupdf.Document | None) -> _Check:
 
 def _find_on_page(
     doc: pymupdf.Document | None, result: Result, value: float, test: LabTest
-) -> tuple[BBox | None, str | None]:
-    """Where the value is printed in a row of its test, or why it can't be found."""
+) -> tuple[tuple[Word, list[Cell]] | None, str | None]:
+    """The printed value and its row, in a row naming its test; or why it can't be found."""
     if doc is None:
         return None, "the original PDF could not be opened, so the value was not checked against it"
     if not 1 <= result.page <= doc.page_count:
@@ -116,13 +126,20 @@ def _find_on_page(
                     continue
                 label = _label(row[:cell_index], cell[:word_index])
                 if 0 < len(label.split()) <= settings.max_label_words and test.is_named_by(label):
-                    return word.bbox, None
+                    return (word, row), None
     if looks_scanned(page, page_text(page)):
         return None, (
             f"page {result.page} is scanned, so the value can't be checked against the PDF's text; "
             "compare it with the original"
         )
     return None, f"{result.value_text} is not printed on page {result.page} in a row naming {test.name}"
+
+
+def _range_printed(row: list[Cell], ref_text: str | None) -> bool:
+    """True when the normal range reads as limits and each one is printed in the value's row."""
+    limits = [limit for limit in parse_range(ref_text) or () if limit is not None]
+    printed = {to_float(number) for cell in row for word in cell for number in re.findall(NUMBER, word.text)}
+    return bool(limits) and all(any(math.isclose(limit, number) for number in printed) for limit in limits)
 
 
 def _label(cells_left: list[Cell], words_before: Cell) -> str:

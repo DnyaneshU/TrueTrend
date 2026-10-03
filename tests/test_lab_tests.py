@@ -143,3 +143,12 @@ def test_catalog_has_the_15_mvp_tests_once_each():
     codes = [test.code for test in CATALOG.tests]
     assert len(codes) == len(set(codes)) == 15
     assert set(typing.get_args(TestCode)) == set(codes)
+
+
+def test_every_variation_constant_cites_its_source():
+    for test in CATALOG.tests:
+        if test.variation is None:
+            continue
+        assert "biologicalvariation.eu" in test.variation.source, test.code  # CVI from the EFLM database
+        if test.variation.between_lab_cv is not None:
+            assert "Between-lab CV:" in test.variation.source, test.code

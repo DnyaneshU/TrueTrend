@@ -6,6 +6,7 @@
 # Each [[tests]] entry:
 #   code       the code results are saved under
 #   name       its plain-English name
+#   name_mr    its name in the Marathi summary
 #   prompt     how the prompt describes the test to Gemma
 #   names      a printed test name must contain one of these words or phrases...
 #   not_names  ...and none of these: look-alike tests labs print nearby
@@ -19,6 +20,16 @@
 #              decimal point (HbA1c 69 % for 6.9 %) or a wrong unit; a result outside
 #              them is kept but marked for checking. They are sanity limits, not
 #              clinical thresholds.
+#   variation  { cvi, cva, between_lab_cv, source }: how much the result varies with no
+#              real change, as CVs in % (within-person, one lab's analytical, and between
+#              labs), for the Reference Change Value in app/change.py. Every number must
+#              come from the cited source; leave the field out when none is known, and
+#              changes in that test are then not judged. CVa is EFLM's minimum standard,
+#              0.75 x CVi, for a lab's own precision is unknown: assuming a lab only just
+#              meets it errs towards "normal variation". A between-lab CV from external
+#              quality assessment already includes each lab's own imprecision, so adding it
+#              to CVa overstates the variation a little: two-lab changes are judged
+#              conservatively, never too eagerly.
 #
 # Conversion factors: glucose x 18.016, cholesterol x 38.67, triglycerides x 88.57,
 # creatinine / 88.4, 25-OH vitamin D / 2.496 and HbA1c IFCC -> NGSP (0.0915 x + 2.15)
@@ -64,16 +75,23 @@ adag_tolerance = 0.3
 [[tests]]
 code = "HBA1C"
 name = "HbA1c"
+name_mr = "HbA1c (सरासरी साखर)"
 prompt = "HbA1c, Glycated / Glycosylated Haemoglobin"
 names = ["HbA1c", "A1c", "glycated", "glycosylated", "glycohaemoglobin", "glycohemoglobin"]
 not_names = []
 unit = "%"
 units = { "%" = 1, "mmol/mol" = { multiply = 0.0915, offset = 2.15 } }
 plausible = [3, 20]
+[tests.variation]
+cvi = 1.2
+cva = 0.9
+between_lab_cv = 3.0
+source = "CVI: EFLM Biological Variation Database, Haemoglobin A1c (NGSP), CVI median 1.173, n=6, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1641 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: CAP GH5-A survey 2024, all-method CV 2.6-3.0 % (upper bound), https://ngsp.org/docs/CAC2024.pdf."
 
 [[tests]]
 code = "GLU_F"
 name = "Fasting glucose"
+name_mr = "उपाशीपोटी साखर"
 prompt = "Fasting blood or plasma glucose, FBS, Fasting Blood Sugar"
 names = ["fasting", "FBS", "FBG", "FPG", "F"]
 not_names = ["estimated", "average", "mean", "random", "RBS", "post", "prandial", "postprandial",
@@ -81,10 +99,16 @@ not_names = ["estimated", "average", "mean", "random", "RBS", "post", "prandial"
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 18.016 }
 plausible = [10, 1500]
+[tests.variation]
+cvi = 4.7
+cva = 3.5
+between_lab_cv = 4.4
+source = "CVI: EFLM Biological Variation Database, Glucose, CVI median 4.669, n=12, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1518 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "GLU_PP"
 name = "Post-prandial glucose"
+name_mr = "जेवणानंतरची साखर"
 prompt = "Post-prandial glucose, PPBS, PP blood sugar, 2-hour glucose"
 names = ["post", "prandial", "postprandial", "PP", "PPBS", "PPBG", "2 hr", "2 hrs", "2 hour",
          "2 hours", "two hour", "two hours"]
@@ -92,10 +116,12 @@ not_names = ["estimated", "average", "mean", "random", "RBS", "fasting", "urine"
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 18.016 }
 plausible = [10, 1500]
+# No variation: the EFLM database has no post-prandial glucose entry, so its changes aren't judged.
 
 [[tests]]
 code = "TSH"
 name = "TSH"
+name_mr = "TSH (थायरॉईड)"
 prompt = "TSH, Thyroid Stimulating Hormone (including ultrasensitive TSH)"
 names = ["TSH", "thyroid stimulating"]
 not_names = ["T3", "T4", "FT3", "FT4"]
@@ -103,70 +129,110 @@ unit = "µIU/mL"
 # "mlU/L" is how some lab fonts print mIU/L
 units = { "µIU/mL" = 1, "mIU/L" = 1, "mlU/L" = 1 }
 plausible = [0, 1000]
+[tests.variation]
+cvi = 17.8
+cva = 13.4
+source = "CVI: EFLM Biological Variation Database, TSH, CVI median 17.817, n=7, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1065 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously)."
 
 [[tests]]
 code = "FT4"
 name = "Free T4"
+name_mr = "फ्री T4 (थायरॉईड)"
 prompt = "Free T4, FT4, Free Thyroxine"
 names = ["free", "FT4"]
 not_names = ["total", "T3", "FT3", "TSH"]
 unit = "ng/dL"
 units = { "ng/dL" = 1, "pmol/L" = 0.0777 }
 plausible = [0, 15]
+[tests.variation]
+cvi = 4.8
+cva = 3.6
+source = "CVI: EFLM Biological Variation Database, Thyroxine - free (FT4), CVI median 4.8, n=5, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/940 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously)."
 
 [[tests]]
 code = "CHOL"
 name = "Total cholesterol"
+name_mr = "एकूण कोलेस्टेरॉल"
 prompt = "Total Cholesterol"
 names = ["cholesterol", "chol", "TC"]
 not_names = ["HDL", "LDL", "VLDL", "density", "lipoprotein", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 plausible = [20, 1500]
+[tests.variation]
+cvi = 5.3
+cva = 4.0
+between_lab_cv = 4.2
+source = "CVI: EFLM Biological Variation Database, Cholesterol, CVI median 5.261, n=36, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/492 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "LDL"
 name = "LDL cholesterol"
+name_mr = "LDL कोलेस्टेरॉल"
 prompt = "LDL Cholesterol (direct or calculated)"
 names = ["LDL", "low density"]
 not_names = ["VLDL", "very", "HDL", "high density", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 plausible = [1, 1000]
+[tests.variation]
+cvi = 7.4
+cva = 5.6
+between_lab_cv = 12.9
+source = "CVI: EFLM Biological Variation Database, LDL Cholesterol, CVI median 7.434, n=21, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1498 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "HDL"
 name = "HDL cholesterol"
+name_mr = "HDL कोलेस्टेरॉल"
 prompt = "HDL Cholesterol"
 names = ["HDL", "high density"]
 not_names = ["LDL", "VLDL", "low density", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
 plausible = [1, 250]
+[tests.variation]
+cvi = 5.7
+cva = 4.3
+between_lab_cv = 14.3
+source = "CVI: EFLM Biological Variation Database, HDL cholesterol, CVI median 5.739, n=36, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/106 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "TG"
 name = "Triglycerides"
+name_mr = "ट्रायग्लिसराइड्स"
 prompt = "Triglycerides"
 names = ["triglyceride", "triglycerides", "TG", "trig", "trigs"]
 not_names = ["ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 88.57 }
 plausible = [5, 10000]
+[tests.variation]
+cvi = 19.8
+cva = 14.9
+between_lab_cv = 11.4
+source = "CVI: EFLM Biological Variation Database, Triglycerides, CVI median 19.761, n=42, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/976 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "CREAT"
 name = "Creatinine"
+name_mr = "क्रिएटिनिन"
 prompt = "Serum Creatinine"
 names = ["creatinine", "creat"]
 not_names = ["urine", "urinary", "clearance", "ratio", "eGFR", "GFR", "creatine", "kinase", "CK", "CPK"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "µmol/L" = { divide = 88.4 } }
 plausible = [0.05, 30]
+[tests.variation]
+cvi = 4.4
+cva = 3.3
+between_lab_cv = 4.7
+source = "CVI: EFLM Biological Variation Database, Creatinine, CVI median 4.386, n=17, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1501 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: RfB (Germany) EQA 2019, median all-participant CV, 645 labs, Paal M et al. Biochem Med 2021;31(3):030902, https://pmc.ncbi.nlm.nih.gov/articles/PMC8340502/."
 
 [[tests]]
 code = "HB"
 name = "Haemoglobin"
+name_mr = "हिमोग्लोबिन"
 prompt = "Haemoglobin / Hemoglobin / Hb"
 names = ["haemoglobin", "hemoglobin", "Hb", "Hgb"]
 # HbA1c and glycated Hb; the blood-count indices MCH and MCHC; electrophoresis fractions
@@ -175,43 +241,70 @@ not_names = ["A1c", "HbA1c", "glycated", "glycosylated", "corpuscular", "MCH", "
 unit = "g/dL"
 units = { "g/dL" = 1, "gm/dL" = 1, "g/L" = { divide = 10 } }
 plausible = [1, 30]
+[tests.variation]
+cvi = 2.7
+cva = 2.0
+source = "CVI: EFLM Biological Variation Database, Haemoglobin (Hb), CVI median 2.673, n=16, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1522 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously)."
 
 [[tests]]
 code = "VITD"
 name = "Vitamin D (25-OH)"
+name_mr = "व्हिटॅमिन डी"
 prompt = "25-Hydroxy (25-OH) Vitamin D, Vitamin D Total"
 names = ["vitamin D", "vit D", "cholecalciferol", "25 OH", "25 hydroxy", "25 hydroxyvitamin"]
 not_names = ["1,25", "dihydroxy"]
 unit = "ng/mL"
 units = { "ng/mL" = 1, "nmol/L" = { divide = 2.496 } }
 plausible = [0, 400]
+[tests.variation]
+cvi = 6.8
+cva = 5.1
+between_lab_cv = 15.0
+source = "CVI: EFLM Biological Variation Database, 25-hydroxy vitamin D3, CVI median 6.761, n=6, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/668 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: DEQAS 2011 interlaboratory CV 15 %, Carter GD, Clin Chem 2012;58:486-8."
 
 [[tests]]
 code = "B12"
 name = "Vitamin B12"
+name_mr = "व्हिटॅमिन बी१२"
 prompt = "Vitamin B12, Cyanocobalamin"
 names = ["B12", "cobalamin", "cyanocobalamin", "methylcobalamin"]
 not_names = []
 unit = "pg/mL"
 units = { "pg/mL" = 1, "pmol/L" = 1.355 }
 plausible = [10, 10000]
+[tests.variation]
+cvi = 7.2
+cva = 5.4
+source = "CVI: EFLM Biological Variation Database, Cobalamin, CVI median 7.246, n=4, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1640 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously)."
 
 [[tests]]
 code = "URIC"
 name = "Uric acid"
+name_mr = "युरिक ॲसिड"
 prompt = "Uric Acid"
 names = ["uric"]
 not_names = ["urine", "urinary", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "µmol/L" = { divide = 59.48 } }
 plausible = [0.2, 30]
+[tests.variation]
+cvi = 8.3
+cva = 6.2
+between_lab_cv = 5.2
+source = "CVI: EFLM Biological Variation Database, Urate, CVI median 8.251, n=16, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1639 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."
 
 [[tests]]
 code = "UREA"
 name = "Urea"
+name_mr = "युरिया"
 prompt = "Urea, Blood Urea, Serum Urea"
 names = ["urea"]
 not_names = ["nitrogen", "BUN", "urine", "urinary", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 6.006 }
 plausible = [1, 500]
+[tests.variation]
+cvi = 13.1
+cva = 9.8
+between_lab_cv = 4.5
+source = "CVI: EFLM Biological Variation Database, Urea, CVI median 13.140, n=14, https://biologicalvariation.eu/api/meta_calculations/meta_by_analyte/1514 (accessed 2026-10-03). CVA: 0.75 x CVI, the EFLM minimum analytical performance specification (a lab just meeting it; most labs are more precise, so changes are judged cautiously). Between-lab CV: China NCCL national EQA 2006, all-method interlaboratory CV (~900 labs), https://bipm.org/documents/20126/51140418/working-document-ID-896/829987b1-9d66-6a0e-b97c-bd0d2a1b1cc2."

@@ -30,3 +30,10 @@ def test_recheck_command_says_what_it_did(tmp_path):
     finished = run_command("app.recheck", storage=tmp_path / "storage")
     assert finished.returncode == 0
     assert finished.stderr.strip() == "Re-checked 0 saved results: 0 verified, 0 to check."
+
+
+def test_summary_command_with_nothing_saved(tmp_path):
+    finished = run_command("app.summary", storage=tmp_path / "storage")
+    assert finished.returncode == 0
+    assert finished.stdout == ""
+    assert "No saved report has a sample date yet" in finished.stderr

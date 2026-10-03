@@ -4,7 +4,6 @@ from contextlib import closing
 import pytest
 
 from app import db, gemma
-from app.config import settings
 from app.errors import ExtractError
 from app.extract import main, run
 from app.models import PageExtraction
@@ -55,13 +54,6 @@ class FakeGemma:
     def transcribe(self, page, model):
         self.transcribed.append(page.number)
         return f"transcription of page {page.number}"
-
-
-@pytest.fixture
-def storage(tmp_path, monkeypatch):
-    """Point the app's storage at a temp folder so tests never touch the real storage/."""
-    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
-    return tmp_path / "storage"
 
 
 @pytest.fixture

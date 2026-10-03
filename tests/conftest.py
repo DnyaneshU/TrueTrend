@@ -3,6 +3,15 @@
 import pymupdf
 import pytest
 
+from app.config import settings
+
+
+@pytest.fixture
+def storage(tmp_path, monkeypatch):
+    """Point the app's storage at a temp folder so tests never touch the real storage/."""
+    monkeypatch.setattr(settings, "storage_dir", tmp_path / "storage")
+    return tmp_path / "storage"
+
 
 @pytest.fixture
 def report_page():

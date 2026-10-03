@@ -11,7 +11,7 @@ from importlib import resources
 from pathlib import Path
 
 from app.config import ROOT, settings
-from app.models import ReportRecord, SavedResult
+from app.models import ReportRecord, SavedResult, TimelinePoint
 
 SCHEMA = resources.files("app").joinpath("schema.sql").read_text(encoding="utf-8")
 
@@ -19,12 +19,16 @@ REPORT_COLUMNS = tuple(ReportRecord.model_fields)
 RESULT_COLUMNS = (
     "test_code", "raw_name", "raw_value_text", "unit", "ref_text", "flag", "page",
     "value", "qualifier", "value_std", "unit_std", "ref_low", "ref_high",
-    "bbox_json", "status", "check_notes",
+    "bbox_json", "ref_verified", "status", "check_notes",
 )  # fmt: skip
 
 # Columns added after the first databases were made: (table, column, definition).
 # CREATE TABLE IF NOT EXISTS leaves an older table as it was, so connect() adds them.
-ADDED_COLUMNS = (("results", "flag", "TEXT"), ("results", "qualifier", "TEXT"))
+ADDED_COLUMNS = (
+    ("results", "flag", "TEXT"),
+    ("results", "qualifier", "TEXT"),
+    ("results", "ref_verified", "INTEGER NOT NULL DEFAULT 0 CHECK (ref_verified IN (0, 1))"),
+)
 
 _INSERT_REPORT = (
     f"INSERT INTO reports ({', '.join(REPORT_COLUMNS)}) VALUES ({', '.join(['?'] * len(REPORT_COLUMNS))})"
@@ -71,6 +75,24 @@ def save_report(
         report_id = conn.execute(_INSERT_REPORT, [report_row[column] for column in REPORT_COLUMNS]).lastrowid
         conn.executemany(_INSERT_RESULT, [[report_id, *_result_row(result)] for result in results])
     return report_id
+
+
+def timeline_points(conn: sqlite3.Connection, patient_id: int | None = None) -> list[TimelinePoint]:
+    """Every saved result that isn't rejected and whose report has a sample date, oldest first.
+
+    patient_id narrows it to one person; None (until patients are matched) means every report.
+    """
+    rows = conn.execute(
+        "SELECT results.id AS result_id, report_id, patient_name_raw AS patient_name, test_code, "
+        "sample_date, lab_name, raw_value_text AS value_text, value, unit, qualifier, value_std, unit_std, "
+        "ref_text, ref_low, ref_high, ref_verified, status, page, file_path "
+        "FROM results JOIN reports ON reports.id = results.report_id "
+        "WHERE sample_date IS NOT NULL AND status != 'rejected' "
+        "AND (:patient IS NULL OR patient_id = :patient) "
+        "ORDER BY sample_date, report_id, results.id",
+        {"patient": patient_id},
+    )
+    return [TimelinePoint(**row) for row in rows]
 
 
 def update_result(conn: sqlite3.Connection, result_id: int, result: SavedResult) -> None:

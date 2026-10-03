@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS results (
     flag            TEXT,                 -- the lab's high/low mark as printed (H, L, ...)
     page            INTEGER NOT NULL,
     bbox_json       TEXT,
+    ref_verified    INTEGER NOT NULL DEFAULT 0 CHECK (ref_verified IN (0, 1)),
     status          TEXT NOT NULL DEFAULT 'needs_check'
                     CHECK (status IN ('verified', 'needs_check', 'rejected')),
     check_notes     TEXT

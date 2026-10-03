@@ -121,3 +121,24 @@ def test_stored_paths_are_repo_relative_and_resolve_back(tmp_path):
     assert db.resolve_stored_path("storage/originals/abc.pdf") == inside
     outside = tmp_path / "abc.pdf"  # AROGYA_STORAGE_DIR outside the repo
     assert db.resolve_stored_path(db.stored_path(outside)) == outside.resolve()
+
+
+def test_timeline_points_are_dated_results_oldest_first_without_rejected_ones(conn):
+    db.save_report(conn, make_report("b", sample_date="2026-04-15"), [make_result(value_text="7.4")])
+    db.save_report(
+        conn,
+        make_report("a", sample_date="2026-01-15", patient_name_raw="Sunita Patil"),
+        [make_result(value_text="7.0"), make_result(test_code="HB", status="rejected")],
+    )
+    db.save_report(conn, make_report("c"), [make_result(value_text="9.9")])  # no sample date
+    points = db.timeline_points(conn)
+    assert [(p.sample_date.isoformat(), p.value_text, p.patient_name) for p in points] == [
+        ("2026-01-15", "7.0", "Sunita Patil"),
+        ("2026-04-15", "7.4", None),
+    ]
+
+
+def test_timeline_points_of_one_patient(conn):
+    db.save_report(conn, make_report("a", sample_date="2026-01-15"), [make_result()])
+    assert db.timeline_points(conn, patient_id=1) == []
+    assert len(db.timeline_points(conn)) == 1

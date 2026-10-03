@@ -55,17 +55,30 @@ class Conversion(BaseModel):
         return value * self.multiply / self.divide + self.offset
 
 
+class Variation(BaseModel):
+    """How much a result varies with no real change, as CVs in %, for the Reference Change Value."""
+
+    model_config = ConfigDict(frozen=True)
+
+    cvi: float = Field(gt=0)  # within-person biological variation
+    cva: float = Field(gt=0)  # one lab's analytical variation
+    between_lab_cv: float | None = Field(default=None, gt=0)  # added when two labs are compared
+    source: str = Field(min_length=1)  # where every number above comes from
+
+
 class LabTest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     code: str
     name: str
+    name_mr: str  # how the Marathi summary names it
     prompt: str
     names: tuple[str, ...] = Field(min_length=1)
     not_names: tuple[str, ...] = ()
     unit: str  # the standard unit
     units: dict[str, Conversion]  # normalised printed unit -> conversion to the standard unit
     plausible: tuple[float, float]  # believable limits in the standard unit, far wider than normal
+    variation: Variation | None = None  # None until sourced constants are found: changes aren't judged
 
     @field_validator("names", "not_names")
     @classmethod

@@ -137,6 +137,27 @@ def test_a_cell_that_is_not_one_value_reads_as_none(printed):
     assert printed_number(printed) is None
 
 
+def test_a_normal_range_printed_in_the_values_row_is_verified(verify, report_page):
+    (hba1c,) = verify([report_page], Result(page=1, test_code="HBA1C", raw_name="HbA1c", value_text="7.2",
+                                            unit="%", ref_text="4.0 - 5.6"))  # fmt: skip
+    assert hba1c.ref_verified and (hba1c.ref_low, hba1c.ref_high) == (4.0, 5.6)
+
+
+@pytest.mark.parametrize("ref_text", ["4.0 - 56", "70 - 100", "Desirable: <5.6 ; Diabetes: >6.5", None])
+def test_a_normal_range_not_printed_in_the_values_row_is_not_verified(verify, report_page, ref_text):
+    # a misread limit, another row's range, a list of categories, no range
+    (hba1c,) = verify([report_page], Result(page=1, test_code="HBA1C", raw_name="HbA1c", value_text="7.2",
+                                            unit="%", ref_text=ref_text))  # fmt: skip
+    assert hba1c.status == "verified" and not hba1c.ref_verified
+
+
+def test_a_one_sided_range_is_verified_by_its_one_limit(verify):
+    page = [(50, 100, "Total Cholesterol"), (200, 100, "189"), (260, 100, "mg/dL"), (320, 100, "< 200")]
+    (chol,) = verify([page], Result(page=1, test_code="CHOL", raw_name="Cholesterol", value_text="189",
+                                    unit="mg/dL", ref_text="Desirable : <200"))  # fmt: skip
+    assert chol.ref_verified and chol.ref_high == 200.0
+
+
 # ---------------------------------------------------------------- believable values and units
 
 
