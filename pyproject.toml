@@ -26,6 +26,7 @@ dev = [
 
 [project.scripts]
 arogya-extract = "app.extract:main"
+arogya-recheck = "app.recheck:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

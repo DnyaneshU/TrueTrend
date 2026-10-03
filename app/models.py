@@ -109,7 +109,11 @@ class Normalized(BaseModel):
 
 
 class SavedResult(Result, Normalized):
+    """A result as saved: printed, normalised, and checked against its PDF by app.verify."""
+
     status: Literal["verified", "needs_check", "rejected"] = "needs_check"
+    # where the value is printed on its page: (x0, y0, x1, y1) in PDF points from the top left
+    bbox: tuple[float, float, float, float] | None = None
 
 
 class ReportRecord(BaseModel):

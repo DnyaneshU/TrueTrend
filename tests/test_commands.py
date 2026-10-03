@@ -26,7 +26,7 @@ def test_extract_command_reports_a_missing_file_in_one_line(tmp_path):
     assert finished.stderr.strip() == f"error: File not found: {missing}"
 
 
-def test_normalize_command_says_what_it_did(tmp_path):
-    finished = run_command("app.normalize", storage=tmp_path / "storage")
+def test_recheck_command_says_what_it_did(tmp_path):
+    finished = run_command("app.recheck", storage=tmp_path / "storage")
     assert finished.returncode == 0
-    assert finished.stderr.strip() == "Re-normalised 0 saved results."
+    assert finished.stderr.strip() == "Re-checked 0 saved results: 0 verified, 0 to check."

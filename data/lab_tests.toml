@@ -14,6 +14,11 @@
 #              a number to multiply by, or { divide = n } / { multiply = n, offset = n }.
 #              Units are compared case- and spacing-insensitively, with µ, u and
 #              "micro" treated alike ("µIU/mL" = "uIU/ml" = "microIU/mL").
+#   plausible  [low, high] in the standard unit: limits a real result stays within, far
+#              wider than any normal range. They only catch misreadings, such as a dropped
+#              decimal point (HbA1c 69 % for 6.9 %) or a wrong unit; a result outside
+#              them is kept but marked for checking. They are sanity limits, not
+#              clinical thresholds.
 #
 # Conversion factors: glucose x 18.016, cholesterol x 38.67, triglycerides x 88.57,
 # creatinine / 88.4, 25-OH vitamin D / 2.496 and HbA1c IFCC -> NGSP (0.0915 x + 2.15)
@@ -41,6 +46,21 @@ empty_words = ["null", "none", "n/a", "-"]
 normal_range_labels = ["normal", "desirable", "optimal", "reference", "ref", "reference range",
                        "biological reference interval", "bio ref interval", "adult", "adults"]
 
+# How results on one report are checked against each other (app/verify.py).
+[checks]
+# A part can't be more than its total: LDL and HDL are parts of total cholesterol.
+# When it is, both results are marked for checking.
+parts_of = { CHOL = ["LDL", "HDL"] }
+# The two below only add a note to the result; they never mark it wrong.
+# Friedewald: LDL is about total cholesterol - HDL - triglycerides / 5 (all mg/dL), a
+# formula that holds only while triglycerides are below friedewald_max_tg. A note is added
+# when the lab's LDL differs from it by more than friedewald_tolerance (a share of it).
+friedewald_max_tg = 400
+friedewald_tolerance = 0.2
+# ADAG: HbA1c corresponds to an average glucose of 28.7 x HbA1c - 46.7 mg/dL. A note is
+# added when fasting glucose on the same report differs from it by more than adag_tolerance.
+adag_tolerance = 0.3
+
 [[tests]]
 code = "HBA1C"
 name = "HbA1c"
@@ -49,6 +69,7 @@ names = ["HbA1c", "A1c", "glycated", "glycosylated", "glycohaemoglobin", "glycoh
 not_names = []
 unit = "%"
 units = { "%" = 1, "mmol/mol" = { multiply = 0.0915, offset = 2.15 } }
+plausible = [3, 20]
 
 [[tests]]
 code = "GLU_F"
@@ -59,6 +80,7 @@ not_names = ["estimated", "average", "mean", "random", "RBS", "post", "prandial"
              "PP", "PPBS", "urine", "urinary"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 18.016 }
+plausible = [10, 1500]
 
 [[tests]]
 code = "GLU_PP"
@@ -69,6 +91,7 @@ names = ["post", "prandial", "postprandial", "PP", "PPBS", "PPBG", "2 hr", "2 hr
 not_names = ["estimated", "average", "mean", "random", "RBS", "fasting", "urine", "urinary"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 18.016 }
+plausible = [10, 1500]
 
 [[tests]]
 code = "TSH"
@@ -79,6 +102,7 @@ not_names = ["T3", "T4", "FT3", "FT4"]
 unit = "µIU/mL"
 # "mlU/L" is how some lab fonts print mIU/L
 units = { "µIU/mL" = 1, "mIU/L" = 1, "mlU/L" = 1 }
+plausible = [0, 1000]
 
 [[tests]]
 code = "FT4"
@@ -88,6 +112,7 @@ names = ["free", "FT4"]
 not_names = ["total", "T3", "FT3", "TSH"]
 unit = "ng/dL"
 units = { "ng/dL" = 1, "pmol/L" = 0.0777 }
+plausible = [0, 15]
 
 [[tests]]
 code = "CHOL"
@@ -97,6 +122,7 @@ names = ["cholesterol", "chol", "TC"]
 not_names = ["HDL", "LDL", "VLDL", "density", "lipoprotein", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
+plausible = [20, 1500]
 
 [[tests]]
 code = "LDL"
@@ -106,6 +132,7 @@ names = ["LDL", "low density"]
 not_names = ["VLDL", "very", "HDL", "high density", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
+plausible = [1, 1000]
 
 [[tests]]
 code = "HDL"
@@ -115,6 +142,7 @@ names = ["HDL", "high density"]
 not_names = ["LDL", "VLDL", "low density", "non", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 38.67 }
+plausible = [1, 250]
 
 [[tests]]
 code = "TG"
@@ -124,6 +152,7 @@ names = ["triglyceride", "triglycerides", "TG", "trig", "trigs"]
 not_names = ["ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 88.57 }
+plausible = [5, 10000]
 
 [[tests]]
 code = "CREAT"
@@ -133,6 +162,7 @@ names = ["creatinine", "creat"]
 not_names = ["urine", "urinary", "clearance", "ratio", "eGFR", "GFR", "creatine", "kinase", "CK", "CPK"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "µmol/L" = { divide = 88.4 } }
+plausible = [0.05, 30]
 
 [[tests]]
 code = "HB"
@@ -144,6 +174,7 @@ not_names = ["A1c", "HbA1c", "glycated", "glycosylated", "corpuscular", "MCH", "
              "HbA", "Hb A", "Hb F", "HbF", "Hb S", "HbS", "foetal", "fetal", "electrophoresis", "HPLC"]
 unit = "g/dL"
 units = { "g/dL" = 1, "gm/dL" = 1, "g/L" = { divide = 10 } }
+plausible = [1, 30]
 
 [[tests]]
 code = "VITD"
@@ -153,6 +184,7 @@ names = ["vitamin D", "vit D", "cholecalciferol", "25 OH", "25 hydroxy", "25 hyd
 not_names = ["1,25", "dihydroxy"]
 unit = "ng/mL"
 units = { "ng/mL" = 1, "nmol/L" = { divide = 2.496 } }
+plausible = [0, 400]
 
 [[tests]]
 code = "B12"
@@ -162,6 +194,7 @@ names = ["B12", "cobalamin", "cyanocobalamin", "methylcobalamin"]
 not_names = []
 unit = "pg/mL"
 units = { "pg/mL" = 1, "pmol/L" = 1.355 }
+plausible = [10, 10000]
 
 [[tests]]
 code = "URIC"
@@ -171,6 +204,7 @@ names = ["uric"]
 not_names = ["urine", "urinary", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "µmol/L" = { divide = 59.48 } }
+plausible = [0.2, 30]
 
 [[tests]]
 code = "UREA"
@@ -180,3 +214,4 @@ names = ["urea"]
 not_names = ["nitrogen", "BUN", "urine", "urinary", "ratio"]
 unit = "mg/dL"
 units = { "mg/dL" = 1, "mmol/L" = 6.006 }
+plausible = [1, 500]

@@ -1,8 +1,8 @@
 """Merge Gemma's answers for each page into one report.
 
 Page numbers come from code, report details are taken from the first page that
-prints them, and rows that can't be trusted are dropped with a warning. Every row
-is still `needs_check` until verification exists.
+prints them, and rows that can't be trusted are dropped with a warning. What is kept
+is checked against the PDF afterwards, by app.verify.
 """
 
 import logging
