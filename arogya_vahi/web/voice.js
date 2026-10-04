@@ -16,12 +16,22 @@
 const WAIT_MS = 1200; // some browsers never fire voiceschanged; don't hang on them
 const RATE = 0.88; // slower than default: this is numbers, not chat
 
-/** Marathi first, then Hindi, which reads Devanagari correctly enough to be understood. */
+/** Best first. Each step down is a worse reading, and `exact` says which are honest.
+ *
+ * Marathi is what this is for. Hindi shares the script and the sounds, so it reads
+ * Devanagari properly. Indian English is the last resort: it pronounces the numbers
+ * and units right, which is most of what a summary says, and gets the Marathi words
+ * around them wrong. It is there because Windows ships no Marathi voice at all -- her
+ * phone has one, this laptop never will -- and a button that does nothing is worse.
+ */
 const WANTED = [
-  (v) => v.lang === "mr-IN",
-  (v) => v.lang?.replace("_", "-").startsWith("mr"),
-  (v) => v.lang?.replace("_", "-").startsWith("hi"),
+  { exact: true, is: (v) => lang(v) === "mr-IN" },
+  { exact: true, is: (v) => lang(v).startsWith("mr") },
+  { exact: true, is: (v) => lang(v).startsWith("hi") },
+  { exact: false, is: (v) => lang(v) === "en-IN" },
 ];
+
+const lang = (v) => (v.lang || "").replace("_", "-");
 
 let ready = null;
 
@@ -43,13 +53,16 @@ function voices() {
   return ready;
 }
 
-/** A voice that can read Marathi, installed on this computer, or null. */
-export async function marathiVoice() {
+/**
+ * The best voice on this device for reading the Marathi summary, or null.
+ * `exact` is false when it is a stand-in that will mispronounce the words.
+ */
+export async function bestVoice() {
   const all = await voices();
   for (const wanted of WANTED) {
     // localService only: an online voice would send her results to whoever provides it.
-    const found = all.find((v) => wanted(v) && v.localService !== false);
-    if (found) return found;
+    const found = all.find((v) => wanted.is(v) && v.localService !== false);
+    if (found) return { voice: found, exact: wanted.exact };
   }
   return null;
 }
@@ -64,17 +77,19 @@ export function stop() {
 /**
  * Speak `lines` one at a time, so a pause falls where a full stop does.
  * Calls `onEnd` when the last one finishes, or when speaking is cancelled.
- * Returns false when this computer has no Marathi voice, having said nothing.
+ *
+ * Returns null when this device can speak nothing at all, and otherwise the voice it
+ * used, so the page can say when the reading is only a stand-in.
  */
 export async function speak(lines, onEnd) {
-  const chosen = await marathiVoice();
-  if (!chosen) return false;
+  const chosen = await bestVoice();
+  if (!chosen) return null;
 
   speechSynthesis.cancel();
   lines.forEach((line, i) => {
     const said = new SpeechSynthesisUtterance(line);
-    said.voice = chosen;
-    said.lang = chosen.lang;
+    said.voice = chosen.voice;
+    said.lang = chosen.voice.lang;
     said.rate = RATE;
     if (i === lines.length - 1) {
       said.onend = onEnd;
@@ -82,5 +97,5 @@ export async function speak(lines, onEnd) {
     }
     speechSynthesis.speak(said);
   });
-  return true;
+  return chosen;
 }

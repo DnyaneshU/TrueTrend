@@ -106,11 +106,11 @@ export const T = {
   firstReport: "First report",
 
   // voice
-  noVoice: "This device has no Marathi voice installed.",
-  installVoice:
-    "Windows: Settings → Time & language → Language & region → Add a language " +
-    "→ मराठी (Marathi), with Speech ticked. " +
-    "iPhone and Android have Marathi voices already. Nothing is sent anywhere either way.",
+  noVoice: "This device cannot speak.",
+  standInVoice:
+    "Read with an Indian English voice: the numbers are right, the Marathi words are not.",
+  voiceOnPhone:
+    "Windows ships no Marathi voice. On a phone, which has one, it is read properly.",
 
   // things said about the data
   reportsSuffix: (n) => `${n} report${n === 1 ? "" : "s"}`,

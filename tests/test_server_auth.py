@@ -223,3 +223,11 @@ def test_the_app_speaks_marathi_about_the_results(client):
     app_js = client.get("/app.js").text
     spoken = [line.strip() for line in app_js.splitlines() if DEVANAGARI.search(line)]
     assert len(spoken) == 1 and "डॉक्टरांना विचारा" in spoken[0]
+
+
+def test_hidden_really_hides(client):
+    # `hidden` works by setting display:none, which any explicit `display` in a rule
+    # beats. Both the sign-in screen and the app set display, so without this the app
+    # showed the login form and the signed-in page at the same time.
+    css = client.get("/styles.css").text
+    assert "[hidden] {\n  display: none !important;\n}" in css

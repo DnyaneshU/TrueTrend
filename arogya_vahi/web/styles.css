@@ -1,38 +1,41 @@
 /* Arogya Vahi — the look.
  *
- * A medical instrument, not a toy. Flat dark panels, hairline rules, one accent colour
- * used only where it carries meaning, and type doing most of the work. Corners are
- * rounded, but nothing glows for its own sake: the only lit things on a screen are a
- * value out of range, a change that is real, and the control under your finger.
+ * A serious instrument that someone enjoyed making. Deep blue-black, one teal accent,
+ * and a second colour only where the data earns it. The interest comes from depth and
+ * type, not from decoration: panels sit on the page with a soft shadow and a lit top
+ * edge, numbers are set large in a tabular face, and the one thing on a screen that
+ * matters is the one thing that glows.
  *
- * Built for a 60-something reader on a phone: 17px base, numbers set in a tabular face
- * so columns line up, and nothing she must tap smaller than 48px.
+ * Built for a 60-something reader on a phone: 17px base, 48px tap targets, and nothing
+ * important carried by colour alone -- every state is also a word.
  */
 
 /* ---------------------------------------------------------------- tokens */
 
 :root {
-  /* Surfaces: four steps, flat, no gradients. */
-  --bg: #0b0d11;
-  --panel: #12151b;
-  --panel-2: #171b22;
-  --line: #242a34;
-  --line-soft: #1b2027;
+  /* Surfaces: a blue-black that reads as considered rather than empty. */
+  --bg: #080b12;
+  --bg-2: #0b0f18;
+  --panel: #111725;
+  --panel-2: #161d2e;
+  --raised: #1b2335;
+  --line: #222b40;
+  --line-soft: #19202f;
 
-  /* Text */
-  --text: #e8ecf2;
-  --text-2: #9aa3b2;
-  --text-3: #626c7d;
+  --text: #e9edf6;
+  --text-2: #98a3bb;
+  --text-3: #5f6a80;
 
   /* Meaning. Each colour appears only where it says something. */
-  --accent: #35c6c0; /* the app's own colour: the current thing, the primary action */
-  --accent-ink: #06201f; /* text on the accent */
-  --up: #e8577f; /* a real increase */
-  --down: #4aa8ff; /* a real decrease */
-  --flat: #6f7b8c; /* within normal variation: deliberately quiet */
-  --warn: #d9a441; /* out of the lab's range, or waiting for a person */
+  --accent: #2ad4c4;
+  --accent-2: #4b8cff; /* the second half of the one gradient, used sparingly */
+  --accent-ink: #042520;
+  --up: #ff5d8f;
+  --down: #46a8ff;
+  --flat: #6c7a93;
+  --warn: #f0a93b;
+  --good: #46d9a0;
 
-  /* Space: one ramp, so nothing is spaced by accident. */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -41,9 +44,9 @@
   --s6: 32px;
   --s7: 44px;
 
-  --r-sm: 6px;
-  --r-md: 10px;
-  --r-lg: 14px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
 
   --tap: 48px;
 
@@ -52,7 +55,8 @@
   --font-mr: "Noto Sans Devanagari", "Nirmala UI", var(--font);
   --font-num: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
 
-  --ease: cubic-bezier(0.2, 0.6, 0.3, 1);
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow: 0 1px 0 #ffffff08 inset, 0 12px 28px -18px #000b;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -71,6 +75,13 @@
   box-sizing: border-box;
 }
 
+/* `hidden` means hidden. The attribute works by setting display:none, which any
+ * explicit display in a rule below would silently beat -- and then a hidden panel
+ * stays on screen. This one line keeps that from ever happening again. */
+[hidden] {
+  display: none !important;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }
@@ -82,19 +93,21 @@ body {
   background: var(--bg);
   color: var(--text);
   font: 400 17px/1.6 var(--font);
-  font-feature-settings: "tnum" 1; /* figures line up in a column */
+  font-feature-settings: "tnum" 1;
   overflow-x: hidden;
+  /* Two quiet pools of light, fixed behind everything, so the dark has a direction. */
+  background-image: radial-gradient(ellipse 70% 45% at 15% -5%, #2ad4c40e, transparent 62%),
+    radial-gradient(ellipse 60% 40% at 92% 2%, #4b8cff0c, transparent 60%);
+  background-attachment: fixed;
 }
 
-/* Marathi needs its own face for the conjuncts, and a little more line height. */
 [lang="mr"] {
   font-family: var(--font-mr);
-  line-height: 1.75;
+  line-height: 1.8;
 }
 
 /* ---------------------------------------------------------------- app frame */
 
-/* The app is one page: a fixed header with the navigation, and the screen below it. */
 .frame {
   display: flex;
   flex-direction: column;
@@ -106,9 +119,9 @@ body {
   top: 0;
   z-index: 30;
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
   padding-top: env(safe-area-inset-top);
 }
 
@@ -116,9 +129,9 @@ body {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  max-width: 62rem;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: var(--s3) var(--s4);
+  padding: var(--s3) var(--s4) var(--s2);
 }
 
 .brand {
@@ -126,47 +139,65 @@ body {
   align-items: center;
   gap: var(--s2);
   min-width: 0;
-  font-size: 0.94rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
   white-space: nowrap;
 }
 
-.brand svg {
-  flex: none;
-  color: var(--accent);
+/* The one gradient in the app, on the wordmark: a signature, used once. */
+.brand b {
+  background: linear-gradient(100deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 700;
 }
 
-/* Who the reports belong to, and who is signed in: the live session, stated plainly. */
+/* Whose reports these are: the live session, stated where it can't be missed. */
 .session {
   display: flex;
   align-items: center;
   gap: var(--s2);
   margin-left: auto;
   min-width: 0;
-  color: var(--text-2);
   font-size: 0.82rem;
+  color: var(--text-3);
 }
 
-.session b {
+.session .who {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
   color: var(--text);
   font-weight: 600;
+  max-width: 13rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session .sep {
-  color: var(--text-3);
+/* A small lit dot: this session is live. */
+.session .who::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 7px var(--accent);
 }
 
-/* The navigation: a row of tabs under the brand, scrollable on a narrow phone. */
 .nav {
   display: flex;
-  gap: var(--s1);
-  max-width: 62rem;
+  gap: 2px;
+  max-width: 64rem;
   margin: 0 auto;
-  padding: 0 var(--s3) 0;
+  padding: 0 var(--s3);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -181,59 +212,52 @@ body {
   align-items: center;
   gap: var(--s2);
   flex: none;
-  min-height: 44px;
+  min-height: 46px;
   padding: 0 var(--s3);
   border: 0;
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
   background: none;
-  color: var(--text-2);
+  color: var(--text-3);
   font: 600 0.88rem/1 var(--font);
-  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: color 0.15s var(--ease);
+  transition: color 0.16s var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
 
 .tab svg {
   width: 17px;
   height: 17px;
-  opacity: 0.85;
 }
 
 .tab:hover {
-  color: var(--text);
+  color: var(--text-2);
 }
 
 .tab[aria-selected="true"] {
   color: var(--text);
 }
 
-/* A 2px rule under the tab you are on: the only "lit" thing in the chrome. */
+/* The lit rule under the section you are in. */
 .tab[aria-selected="true"]::after {
   content: "";
   position: absolute;
   left: var(--s2);
   right: var(--s2);
-  bottom: 0;
+  bottom: -1px;
   height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: var(--accent);
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px -2px var(--accent);
 }
 
-/* A count on a tab that is waiting for you. */
 .tab .count {
   min-width: 19px;
   height: 19px;
   padding: 0 5px;
   border-radius: 10px;
   background: var(--warn);
-  color: #221902;
+  color: #241802;
   font: 700 0.7rem/19px var(--font-num);
   text-align: center;
-}
-
-.tab .count[hidden] {
-  display: none;
 }
 
 /* ---------------------------------------------------------------- page */
@@ -241,43 +265,70 @@ body {
 .page {
   flex: 1;
   width: 100%;
-  max-width: 62rem;
+  max-width: 64rem;
   margin: 0 auto;
   padding: var(--s5) var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
 }
 
-.screen[hidden] {
-  display: none;
+.screen {
+  animation: rise 0.28s var(--ease) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 /* ---------------------------------------------------------------- panels */
 
 .panel {
+  position: relative;
   margin: 0 0 var(--s4);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  background: var(--panel);
+  background: linear-gradient(176deg, var(--panel-2), var(--panel) 60%);
+  box-shadow: var(--shadow);
+}
+
+/* A hairline of light along the top edge: the panel catches the light in the room. */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14%;
+  right: 14%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--edge, #ffffff1f), transparent);
+}
+
+.panel--accent {
+  --edge: var(--accent);
 }
 
 .panel-head {
   display: flex;
   align-items: baseline;
   gap: var(--s3);
-  padding: var(--s4) var(--s5) 0;
+  padding: var(--s5) var(--s5) 0;
 }
 
 .panel-head h1,
 .panel-head h2 {
   margin: 0;
-  font-size: 1.16rem;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
 }
 
 .panel-head .meta {
   margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   color: var(--text-3);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -295,17 +346,17 @@ body {
 }
 
 .lede {
-  margin: var(--s1) 0 0;
+  margin: var(--s2) 0 0;
   color: var(--text-2);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .eyebrow {
-  margin: 0 0 var(--s1);
+  margin: 0 0 var(--s2);
   color: var(--text-3);
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -321,7 +372,7 @@ body {
   height: 1px;
   margin: var(--s4) 0;
   border: 0;
-  background: var(--line-soft);
+  background: linear-gradient(90deg, var(--line), transparent);
 }
 
 /* ---------------------------------------------------------------- controls */
@@ -335,24 +386,25 @@ body {
   padding: 0 var(--s4);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--panel-2);
+  background: var(--raised);
   color: var(--text);
   font: 600 0.94rem/1 var(--font);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  transition: transform 0.12s var(--ease), background 0.16s var(--ease),
+    border-color 0.16s var(--ease);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .btn:hover:not(:disabled) {
-  border-color: #313846;
-  background: #1c212a;
+  border-color: #2e3950;
+  background: #202a3f;
 }
 
 .btn:active:not(:disabled) {
-  background: #161b23;
+  transform: translateY(1px);
 }
 
 .btn:disabled {
@@ -360,20 +412,18 @@ body {
   cursor: not-allowed;
 }
 
-/* The one action a screen is for. Flat accent, no gradient. */
+/* The one action a screen is for. */
 .btn--primary {
   border-color: transparent;
-  background: var(--accent);
+  background: linear-gradient(100deg, var(--accent), #35b8e8 70%, var(--accent-2));
   color: var(--accent-ink);
   font-weight: 700;
+  box-shadow: 0 8px 24px -14px var(--accent);
 }
 
 .btn--primary:hover:not(:disabled) {
-  background: #45d6d0;
-}
-
-.btn--primary:active:not(:disabled) {
-  background: #2fb3ad;
+  background: linear-gradient(100deg, #3ee5d5, #46c6f2 70%, #5c98ff);
+  box-shadow: 0 10px 28px -12px var(--accent);
 }
 
 .btn--wide {
@@ -399,13 +449,15 @@ body {
 }
 
 .btn--yes {
-  border-color: #2b4a3a;
-  color: #63d898;
+  border-color: #23543f;
+  background: #132a22;
+  color: var(--good);
 }
 
 .btn--no {
-  border-color: #4a2b36;
-  color: #e8577f;
+  border-color: #58283a;
+  background: #2a1620;
+  color: var(--up);
 }
 
 .btn-row {
@@ -437,13 +489,15 @@ input[type="password"] {
   padding: 0 var(--s3);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: #0e1116;
+  background: #0a0e17;
   color: var(--text);
   font: 400 1rem/1 var(--font);
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
 
 input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px #2ad4c41f;
   outline: none;
 }
 
@@ -465,25 +519,32 @@ input::placeholder {
 
 /* ---------------------------------------------------------------- findings */
 
-/* What the summary says: a test, its reading, and the sentence about it. */
+/* What the summary says: a bar in the colour of the news, then the sentence. */
 .finding {
-  display: grid;
-  grid-template-columns: 3px 1fr;
-  gap: var(--s4);
-  padding: var(--s4) 0;
+  position: relative;
+  padding: var(--s4) 0 var(--s4) var(--s4);
   border-top: 1px solid var(--line-soft);
 }
 
 .finding:first-child {
   border-top: 0;
-  padding-top: 0;
+  padding-top: var(--s1);
 }
 
-/* The one lit element: a bar in the colour of what the sentence says. */
 .finding::before {
   content: "";
-  border-radius: 2px;
+  position: absolute;
+  left: 0;
+  top: var(--s4);
+  bottom: var(--s4);
+  width: 3px;
+  border-radius: 3px;
   background: var(--tone, var(--flat));
+  box-shadow: 0 0 12px -3px var(--tone, transparent);
+}
+
+.finding:first-child::before {
+  top: var(--s1);
 }
 
 .finding p {
@@ -511,17 +572,21 @@ input::placeholder {
   gap: var(--s3);
   width: 100%;
   min-height: var(--tap);
-  padding: var(--s3) 0;
+  padding: var(--s3) var(--s3);
+  margin: 0 calc(var(--s3) * -1);
   border: 0;
-  border-top: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
   background: none;
   color: inherit;
   font: inherit;
   text-align: left;
+  transition: background 0.14s var(--ease);
 }
 
-.row:first-child {
-  border-top: 0;
+.row + .row,
+.row + div > .row {
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
 }
 
 button.row {
@@ -529,7 +594,7 @@ button.row {
 }
 
 button.row:hover {
-  background: #141820;
+  background: var(--panel-2);
 }
 
 .row-main {
@@ -539,7 +604,7 @@ button.row:hover {
 
 .row-name {
   font-weight: 600;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
 }
 
 .row-sub {
@@ -549,44 +614,48 @@ button.row:hover {
   font-weight: 400;
 }
 
+/* The number is the point of the row: set it large and let it lead. */
 .row-value {
   flex: none;
-  font: 600 1.02rem/1 var(--font-num);
+  font: 650 1.08rem/1 var(--font-num);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
 }
 
 .row-end {
   flex: none;
-  color: var(--text-3);
   display: flex;
   align-items: center;
+  gap: var(--s2);
+  color: var(--text-3);
 }
 
 /* ---------------------------------------------------------------- tags */
 
-/* A word for what something is. Only the ones that mean "look at this" get colour. */
 .tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border: 1px solid var(--tag-line, var(--line));
-  border-radius: var(--r-sm);
+  border-radius: 999px;
+  background: var(--tag-bg, transparent);
   color: var(--tag, var(--text-2));
   font-size: 0.74rem;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .tag--up {
   --tag: var(--up);
-  --tag-line: #4a2b36;
+  --tag-line: #5a2a3c;
+  --tag-bg: #ff5d8f12;
 }
 .tag--down {
   --tag: var(--down);
-  --tag-line: #23405e;
+  --tag-line: #214469;
+  --tag-bg: #46a8ff12;
 }
 .tag--flat {
   --tag: var(--flat);
@@ -594,37 +663,44 @@ button.row:hover {
 }
 .tag--warn {
   --tag: var(--warn);
-  --tag-line: #4a3c1d;
+  --tag-line: #574119;
+  --tag-bg: #f0a93b12;
 }
 .tag--ok {
   --tag: var(--accent);
-  --tag-line: #1d4745;
+  --tag-line: #17524c;
+  --tag-bg: #2ad4c412;
 }
 
 /* ---------------------------------------------------------------- chart */
 
 .chart-wrap {
   position: relative;
-  height: 240px;
-  margin: var(--s3) 0 var(--s5);
+  height: 250px;
+  margin: var(--s2) 0 var(--s5);
+  padding: var(--s3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: #0a0e17;
 }
 
 /* ---------------------------------------------------------------- queue */
 
 .bar {
-  height: 2px;
+  height: 3px;
   margin-top: var(--s3);
-  border-radius: 2px;
-  background: var(--line);
+  border-radius: 3px;
+  background: var(--line-soft);
   overflow: hidden;
 }
 
 .bar::after {
   content: "";
   display: block;
-  width: 30%;
+  width: 32%;
   height: 100%;
-  background: var(--accent);
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent-2), transparent);
   animation: sweep 1.4s var(--ease) infinite;
 }
 
@@ -633,14 +709,14 @@ button.row:hover {
     transform: translateX(-100%);
   }
   to {
-    transform: translateX(430%);
+    transform: translateX(420%);
   }
 }
 
 .spinner {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--line);
   border-top-color: var(--accent);
   border-radius: 50%;
@@ -658,22 +734,27 @@ button.row:hover {
 .note {
   margin: var(--s3) 0 0;
   padding: var(--s3) var(--s4);
-  border: 1px solid var(--note-line, var(--line));
-  border-left-width: 2px;
-  border-left-color: var(--note, var(--text-3));
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--note, var(--text-3));
   border-radius: var(--r-sm);
-  background: var(--panel-2);
+  background: var(--note-bg, var(--panel-2));
   color: var(--text-2);
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   line-height: 1.55;
 }
 
 .note--warn {
   --note: var(--warn);
+  --note-bg: #f0a93b0d;
 }
 
 .note--bad {
   --note: var(--up);
+  --note-bg: #ff5d8f0d;
+}
+
+.note b {
+  color: var(--text);
 }
 
 .note .btn {
@@ -690,7 +771,7 @@ button.row:hover {
 
 .empty svg {
   margin-bottom: var(--s2);
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 .empty p {
@@ -703,7 +784,7 @@ details {
   margin-top: var(--s4);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--panel-2);
+  background: var(--bg-2);
 }
 
 summary {
@@ -724,7 +805,7 @@ summary::-webkit-details-marker {
 }
 
 summary svg {
-  color: var(--text-3);
+  color: var(--accent);
 }
 
 details[open] summary {
@@ -736,11 +817,16 @@ details[open] summary {
   padding: var(--s4) var(--s4) var(--s4) calc(var(--s4) + 1.4rem);
   color: var(--text-2);
   font-size: 0.9rem;
-  line-height: 1.7;
+  line-height: 1.75;
 }
 
 .steps li {
   margin-bottom: 6px;
+}
+
+.steps li::marker {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .steps li:last-child {
@@ -759,11 +845,9 @@ details[open] summary {
   z-index: 60;
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg) 92%, #000);
-}
-
-.overlay[hidden] {
-  display: none;
+  background: #05080fef;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .overlay-bar {
@@ -778,8 +862,9 @@ details[open] summary {
 .overlay-bar h2 {
   flex: 1;
   margin: 0;
-  font-size: 0.98rem;
-  font-weight: 650;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .overlay-body {
@@ -790,7 +875,7 @@ details[open] summary {
 }
 
 .overlay-body > .inner {
-  max-width: 48rem;
+  max-width: 50rem;
   margin: 0 auto;
 }
 
@@ -800,6 +885,7 @@ details[open] summary {
   height: auto;
   border-radius: var(--r-sm);
   background: #fff; /* a report page is paper: show it as paper */
+  box-shadow: 0 20px 50px -24px #000;
 }
 
 /* ---------------------------------------------------------------- guide */
@@ -811,13 +897,9 @@ details[open] summary {
   display: grid;
   place-items: center;
   padding: var(--s4);
-  background: #05070ad9;
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-}
-
-.guide[hidden] {
-  display: none;
+  background: #04070cdd;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
 }
 
 .guide-card {
@@ -827,11 +909,9 @@ details[open] summary {
   overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  background: var(--panel);
-}
-
-.guide-card .panel-body {
-  padding: var(--s5);
+  background: linear-gradient(176deg, var(--panel-2), var(--panel) 55%);
+  box-shadow: 0 30px 70px -30px #000, 0 0 0 1px #2ad4c414;
+  animation: rise 0.3s var(--ease) both;
 }
 
 .guide-step {
@@ -839,11 +919,11 @@ details[open] summary {
   align-items: center;
   gap: var(--s3);
   padding: var(--s4) var(--s5);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--line-soft);
   color: var(--text-3);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -853,9 +933,9 @@ details[open] summary {
 
 .guide h2 {
   margin: 0 0 var(--s3);
-  font-size: 1.22rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 1.28rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 .guide p {
@@ -871,14 +951,16 @@ details[open] summary {
 }
 
 .dots i {
-  width: 20px;
+  width: 18px;
   height: 3px;
   border-radius: 2px;
   background: var(--line);
+  transition: background 0.2s var(--ease);
 }
 
 .dots i.on {
   background: var(--accent);
+  box-shadow: 0 0 8px -1px var(--accent);
 }
 
 .guide-foot {
@@ -888,7 +970,6 @@ details[open] summary {
   padding: var(--s4) var(--s5) var(--s5);
 }
 
-/* The key map: what each thing on screen means. */
 .legend {
   margin: var(--s4) 0 0;
   padding: 0;
@@ -909,12 +990,12 @@ details[open] summary {
 
 .legend .key {
   flex: none;
-  min-width: 5.4rem;
+  min-width: 5.6rem;
   color: var(--text);
 }
 
 .legend .key svg {
-  color: var(--text-2);
+  color: var(--accent);
   vertical-align: -4px;
 }
 
@@ -937,6 +1018,7 @@ details[open] summary {
 .gate-inner {
   width: 100%;
   max-width: 21rem;
+  animation: rise 0.4s var(--ease) both;
 }
 
 .gate-mark {
@@ -946,19 +1028,24 @@ details[open] summary {
   margin-bottom: var(--s5);
 }
 
-.gate-mark svg {
+.gate-mark > svg {
   flex: none;
+  padding: 7px;
+  border: 1px solid #1d4a47;
+  border-radius: var(--r-md);
+  background: #0e1a22;
   color: var(--accent);
+  box-shadow: 0 0 24px -10px var(--accent);
 }
 
 .gate-mark b {
   display: block;
-  font-size: 1.04rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: 1.06rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-.gate-mark span {
+.gate-mark span span {
   display: block;
   color: var(--text-3);
   font-size: 0.82rem;
@@ -981,6 +1068,7 @@ details[open] summary {
 .gate-foot svg {
   flex: none;
   margin-top: 2px;
+  color: var(--accent);
 }
 
 /* ---------------------------------------------------------------- wider screens */
@@ -994,10 +1082,9 @@ details[open] summary {
     padding-top: var(--s6);
   }
 
-  /* Two columns where there is room: the summary beside what it refers to. */
   .cols {
     display: grid;
-    grid-template-columns: 1.3fr 1fr;
+    grid-template-columns: 1.35fr 1fr;
     gap: var(--s4);
     align-items: start;
   }
@@ -1009,12 +1096,15 @@ details[open] summary {
 
 /* ---------------------------------------------------------------- print */
 
-/* Printing the summary to take to the doctor: ink on paper. */
 @media print {
   body {
     background: #fff;
     color: #000;
     font-size: 11pt;
+  }
+  body,
+  .panel {
+    background-image: none;
   }
   .topbar,
   .btn,
@@ -1026,9 +1116,11 @@ details[open] summary {
   .panel {
     border: 1px solid #bbb;
     background: none;
+    box-shadow: none;
     break-inside: avoid;
   }
   .finding::before {
     background: #666 !important;
+    box-shadow: none !important;
   }
 }

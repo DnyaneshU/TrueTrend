@@ -26,6 +26,7 @@ const state = {
   questions: null,
   chart: null,
   polling: null,
+  saidAboutVoice: false, // the stand-in voice is explained once, not on every press
 };
 
 // ---------------------------------------------------------------- loading
@@ -120,9 +121,16 @@ async function onSpeak() {
 
   setSpeaking(true); // the voice list may take a moment; show that the press landed
   const spoke = await voice.speak(lines, () => setSpeaking(false));
+
   if (!spoke) {
     setSpeaking(false);
-    fill($("home-notes"), note([el("b", t.T.noVoice), el("br"), t.T.installVoice], "warn"));
+    return fill($("home-notes"), note([el("b", t.T.noVoice), " ", t.T.voiceOnPhone], "warn"));
+  }
+  // Said once, not every time: an English voice reading Marathi is understandable for
+  // the numbers but wrong for the words, and she should know that is what she is hearing.
+  if (!spoke.exact && !state.saidAboutVoice) {
+    state.saidAboutVoice = true;
+    fill($("home-notes"), note([el("b", t.T.standInVoice), " ", t.T.voiceOnPhone]));
   }
 }
 
