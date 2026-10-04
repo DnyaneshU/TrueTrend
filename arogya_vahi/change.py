@@ -20,8 +20,8 @@ import math
 from collections.abc import Iterable, Sequence
 from itertools import pairwise
 
-from arogya_vahi.lab_tests import LabTest, Variation
-from arogya_vahi.models import Change, TimelinePoint
+from arogya_vahi.lab_tests import CATALOG, LabTest, Variation
+from arogya_vahi.models import Change, Timeline, TimelinePoint
 from arogya_vahi.text import same_name
 
 Z_95 = 1.96  # two-sided 95 %
@@ -55,6 +55,26 @@ def timelines(points: Iterable[TimelinePoint]) -> dict[str, list[TimelinePoint]]
         if kept is None or (kept.status != "verified" and point.status == "verified"):
             per_date[point.sample_date] = point
     return {code: list(per_date.values()) for code, per_date in by_test.items()}
+
+
+def every_timeline(points: Iterable[TimelinePoint]) -> list[Timeline]:
+    """Each catalog test's timeline, in catalog order, with its changes judged.
+
+    Results of a test since removed from the catalog are left out.
+    """
+    by_test = timelines(points)
+    return [
+        Timeline(
+            code=test.code,
+            name=test.name,
+            name_mr=test.name_mr,
+            unit=test.unit,
+            points=by_test[test.code],
+            changes=timeline_changes(by_test[test.code], test),
+        )
+        for test in CATALOG.tests
+        if test.code in by_test
+    ]
 
 
 def timeline_changes(points: Sequence[TimelinePoint], test: LabTest) -> list[Change]:

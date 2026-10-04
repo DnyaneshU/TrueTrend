@@ -299,3 +299,59 @@ class Summary(BaseModel):
     changes: list[Change] = Field(default_factory=list)  # every consecutive pair, judged
     other_people: list[str] = Field(default_factory=list)  # names on reports left out: not this person
     reports_left_out: int = 0  # earlier reports naming someone else, or no one
+
+
+# --- The upload queue and what a person is asked to check.
+
+UploadStatus = Literal["queued", "reading", "saved", "already_saved", "failed"]
+Review = Literal["verified", "rejected"]  # a person's decision on a result
+
+
+class Upload(BaseModel):
+    """A file sent to be read, and how reading it went."""
+
+    id: int
+    file_name: str
+    sha256: str
+    status: UploadStatus
+    message: str | None  # warnings, or why it failed
+    report_id: int | None
+    created_at: str
+    updated_at: str | None
+
+
+class ResultToCheck(BaseModel):
+    """A saved result the code could not verify: a person compares it with the original page."""
+
+    result_id: int
+    report_id: int
+    patient_id: int | None
+    test_code: str
+    raw_name: str
+    value_text: str  # as printed
+    unit: str | None
+    page: int
+    sample_date: str | None
+    report_date: str | None
+    lab_name: str | None
+    notes: list[str]  # why it could not be verified
+
+
+class Timeline(BaseModel):
+    """One test's results for one patient, oldest first, and each change between them, judged."""
+
+    code: str
+    name: str
+    name_mr: str
+    unit: str  # the standard unit values are compared in
+    points: list[TimelinePoint]
+    changes: list[Change]
+
+
+class Questions(BaseModel):
+    """What a person is asked to decide; each answer is one API call."""
+
+    results_to_check: list[ResultToCheck]
+    same_person: list[tuple[Patient, Patient]]  # "Is X the same person as Y?": same name, ruled apart
+    unmatched_reports: list[ReportPerson]  # reports that name someone but could be more than one patient
+    duplicates: list[tuple[int, int]]  # (earlier, later) report ids: one patient, lab and sample date

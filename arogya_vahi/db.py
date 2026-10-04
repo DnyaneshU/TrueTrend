@@ -11,19 +11,31 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from arogya_vahi.config import settings
-from arogya_vahi.models import Patient, ReportPerson, ReportRecord, Result, SavedResult, TimelinePoint
+from arogya_vahi.models import (
+    Patient,
+    ReportPerson,
+    ReportRecord,
+    Result,
+    ResultToCheck,
+    Review,
+    SavedResult,
+    TimelinePoint,
+    Upload,
+    UploadStatus,
+)
 from arogya_vahi.resources import read_text
 from arogya_vahi.text import split_flag
 
 SCHEMA = read_text("schema.sql")
 # Bumped when an older database needs migrating: see _migrate.
-SCHEMA_VERSION = 2  # 2: reports are indexed by patient
+SCHEMA_VERSION = 3  # 2: reports are indexed by patient; 3: uploads, and results a person reviewed
 # Columns added after the first databases were made: CREATE TABLE IF NOT EXISTS leaves
 # an older table as it was, so _migrate adds them.
 ADDED_COLUMNS = (
     ("results", "flag", "TEXT"),
     ("results", "qualifier", "TEXT"),
     ("results", "ref_verified", "INTEGER NOT NULL DEFAULT 0 CHECK (ref_verified IN (0, 1))"),
+    ("results", "reviewed", "TEXT CHECK (reviewed IN ('verified', 'rejected'))"),
 )
 
 REPORT_COLUMNS = tuple(ReportRecord.model_fields)
@@ -51,6 +63,10 @@ _SELECT_PERSON = (
     "patient_sex_raw AS sex, sample_date, report_date, lab_name FROM reports"
 )
 _PEOPLE_ORDER = "ORDER BY COALESCE(sample_date, report_date), id"
+_SELECT_UPLOAD = (
+    "SELECT id, file_name, sha256, status, message, report_id, created_at, updated_at FROM uploads"
+)
+_NOW = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"  # SQLite's current time, as the schema stores it
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
@@ -118,16 +134,18 @@ def timeline_points(conn: sqlite3.Connection, patient_id: int | None = None) -> 
     """Every saved result that isn't rejected and whose report has a sample date, oldest first.
 
     patient_id narrows it to one person; None means every report. A matched report's person
-    is named as their patient is; an unmatched one as printed.
+    is named as their patient is; an unmatched one as printed. A result a person reviewed
+    has the status they gave it.
     """
     rows = conn.execute(
         "SELECT results.id AS result_id, report_id, reports.patient_id, "
         "COALESCE(patients.display_name, patient_name_raw) AS patient_name, test_code, sample_date, "
         "lab_name, raw_value_text AS value_text, value, unit, qualifier, value_std, unit_std, ref_text, "
-        "ref_low, ref_high, ref_verified, status, page, file_path "
+        "ref_low, ref_high, ref_verified, COALESCE(reviewed, status) AS status, page, file_path "
         "FROM results JOIN reports ON reports.id = results.report_id "
         "LEFT JOIN patients ON patients.id = reports.patient_id "
-        "WHERE sample_date IS NOT NULL AND test_code IS NOT NULL AND status != 'rejected' "
+        "WHERE sample_date IS NOT NULL AND test_code IS NOT NULL "
+        "AND COALESCE(reviewed, status) != 'rejected' "
         "AND (:patient IS NULL OR reports.patient_id = :patient) "
         "ORDER BY sample_date, report_id, results.id",
         {"patient": patient_id},
@@ -212,10 +230,130 @@ def move_reports(conn: sqlite3.Connection, from_patient: int, to_patient: int) -
     conn.execute("UPDATE reports SET patient_id = ? WHERE patient_id = ?", (to_patient, from_patient))
 
 
+def latest_patient_id(conn: sqlite3.Connection) -> int | None:
+    """The patient of the report with the latest sample date, if it is matched to one."""
+    row = conn.execute(
+        "SELECT patient_id FROM reports WHERE sample_date IS NOT NULL "
+        "ORDER BY sample_date DESC, id DESC LIMIT 1"
+    ).fetchone()
+    return row["patient_id"] if row else None
+
+
 def report_patient_id(conn: sqlite3.Connection, sha256: str) -> int | None:
     """Who the report saved from the file with this sha256 is for, if it is saved and matched."""
     row = conn.execute("SELECT patient_id FROM reports WHERE sha256 = ?", (sha256,)).fetchone()
     return row["patient_id"] if row else None
+
+
+def results_to_check(conn: sqlite3.Connection, patient_id: int | None = None) -> list[ResultToCheck]:
+    """Saved results that need a person to check them against the original, oldest first."""
+    rows = conn.execute(
+        "SELECT results.id AS result_id, report_id, reports.patient_id, test_code, raw_name, "
+        "raw_value_text AS value_text, unit, page, sample_date, report_date, lab_name, check_notes "
+        "FROM results JOIN reports ON reports.id = results.report_id "
+        "WHERE status = 'needs_check' AND reviewed IS NULL AND test_code IS NOT NULL "
+        "AND (:patient IS NULL OR reports.patient_id = :patient) "
+        "ORDER BY COALESCE(sample_date, report_date), report_id, results.id",
+        {"patient": patient_id},
+    )
+    return [
+        ResultToCheck(**row, notes=(row["check_notes"] or "").split("; ") if row["check_notes"] else [])
+        for row in rows
+    ]
+
+
+def review_result(conn: sqlite3.Connection, result_id: int, decision: Review) -> bool:
+    """Record a person's decision on a result ("verified" or "rejected"); False if there is no such result."""
+    return conn.execute("UPDATE results SET reviewed = ? WHERE id = ?", (decision, result_id)).rowcount > 0
+
+
+def report_file(conn: sqlite3.Connection, report_id: int) -> str | None:
+    """reports.file_path of a report, if it is saved."""
+    row = conn.execute("SELECT file_path FROM reports WHERE id = ?", (report_id,)).fetchone()
+    return row["file_path"] if row else None
+
+
+def delete_report(conn: sqlite3.Connection, report_id: int) -> bool:
+    """Delete a report and its results (a duplicate); its stored original is kept. True if deleted."""
+    return conn.execute("DELETE FROM reports WHERE id = ?", (report_id,)).rowcount > 0
+
+
+def same_sample_reports(conn: sqlite3.Connection) -> list[tuple[int, int]]:
+    """(earlier, later) report ids of one patient, one lab and one sample date: likely duplicates."""
+    rows = conn.execute(
+        "SELECT a.id AS earlier, b.id AS later FROM reports a JOIN reports b "
+        "ON a.patient_id = b.patient_id AND a.sample_date = b.sample_date AND a.id < b.id "
+        "AND lower(COALESCE(a.lab_name, '')) = lower(COALESCE(b.lab_name, '')) "
+        "WHERE a.patient_id IS NOT NULL AND a.sample_date IS NOT NULL ORDER BY b.id, a.id"
+    )
+    return [(row["earlier"], row["later"]) for row in rows]
+
+
+# ---------------------------------------------------------------- the upload queue
+
+
+def add_upload(conn: sqlite3.Connection, file_name: str, sha256: str) -> Upload:
+    """Queue a file to be read."""
+    upload_id = conn.execute(
+        "INSERT INTO uploads (file_name, sha256) VALUES (?, ?)", (file_name, sha256)
+    ).lastrowid
+    return upload(conn, upload_id)
+
+
+def upload(conn: sqlite3.Connection, upload_id: int) -> Upload | None:
+    row = conn.execute(f"{_SELECT_UPLOAD} WHERE id = ?", (upload_id,)).fetchone()
+    return Upload(**row) if row else None
+
+
+def uploads(conn: sqlite3.Connection, limit: int = 50) -> list[Upload]:
+    """The most recent uploads, newest first."""
+    return [Upload(**row) for row in conn.execute(f"{_SELECT_UPLOAD} ORDER BY id DESC LIMIT ?", (limit,))]
+
+
+def pending_upload(conn: sqlite3.Connection, sha256: str) -> Upload | None:
+    """An upload of the same bytes still waiting or being read, if any."""
+    row = conn.execute(
+        f"{_SELECT_UPLOAD} WHERE sha256 = ? AND status IN ('queued', 'reading') ORDER BY id", (sha256,)
+    ).fetchone()
+    return Upload(**row) if row else None
+
+
+def saved_upload(conn: sqlite3.Connection, sha256: str) -> Upload | None:
+    """The upload that saved a report from the same bytes, if its report is still saved."""
+    row = conn.execute(
+        f"{_SELECT_UPLOAD} WHERE sha256 = ? AND report_id IS NOT NULL ORDER BY id DESC", (sha256,)
+    ).fetchone()
+    return Upload(**row) if row else None
+
+
+def claim_next_upload(conn: sqlite3.Connection) -> Upload | None:
+    """The oldest queued upload, now marked as being read; None when nothing is waiting."""
+    with write(conn):
+        row = conn.execute(f"{_SELECT_UPLOAD} WHERE status = 'queued' ORDER BY id LIMIT 1").fetchone()
+        if row is None:
+            return None
+        conn.execute(
+            f"UPDATE uploads SET status = 'reading', updated_at = {_NOW} WHERE id = :id",
+            {"id": row["id"]},
+        )
+    return upload(conn, row["id"])
+
+
+def finish_upload(
+    conn: sqlite3.Connection, upload_id: int, status: UploadStatus, message: str | None, report_id: int | None
+) -> None:
+    with write(conn):
+        conn.execute(
+            "UPDATE uploads SET status = :status, message = :message, report_id = :report, "
+            f"updated_at = {_NOW} WHERE id = :id",
+            {"status": status, "message": message, "report": report_id, "id": upload_id},
+        )
+
+
+def requeue_interrupted_uploads(conn: sqlite3.Connection) -> int:
+    """Uploads left 'reading' by a stop or crash are queued again; returns how many."""
+    with write(conn):
+        return conn.execute("UPDATE uploads SET status = 'queued' WHERE status = 'reading'").rowcount
 
 
 def stored_path(path: Path) -> str:

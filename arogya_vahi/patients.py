@@ -132,6 +132,18 @@ def _remember(patient: Patient, printed: str, sex: str | None, birth_year: int |
     )
 
 
+def possibly_same(conn: sqlite3.Connection) -> list[tuple[Patient, Patient]]:
+    """Pairs of patients with the same name, kept apart by their sex, age or another name:
+    "Is Sunita Patil the same person as Sunita Patil?" is the user's to answer."""
+    everyone = db.patients(conn)
+    return [
+        (a, b)
+        for index, a in enumerate(everyone)
+        for b in everyone[index + 1 :]
+        if any(_names(b, name) for name in (a.display_name, *a.aliases))
+    ]
+
+
 # ---------------------------------------------------------------- corrections
 
 

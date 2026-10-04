@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     storage_dir: Path = _default_storage()
     db_timeout: float = 30.0  # seconds to wait while another command is writing to the database
 
+    # The web app
+    max_upload_bytes: int = 50 * 2**20  # a phone photo or a long report fits; a mistake doesn't
+
     @property
     def db_path(self) -> Path:
         return self.storage_dir / "arogya.db"
@@ -59,6 +62,11 @@ class Settings(BaseSettings):
     def originals_dir(self) -> Path:
         """Stored originals, named <sha256>.pdf: long names, so long paths must work on Windows."""
         return _long_path(self.storage_dir / "originals")
+
+    @property
+    def inbox_dir(self) -> Path:
+        """Sent files waiting to be read, as PDFs named <sha256>.pdf."""
+        return _long_path(self.storage_dir / "inbox")
 
     @field_validator("ollama_host")
     @classmethod
