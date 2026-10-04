@@ -12,9 +12,11 @@ storage/
 *.png
 *.heic
 *.webp
-# ...except synthetic sample reports and the web app's own pictures
+# ...except synthetic sample reports, the web app's own pictures, and the project
+# page's screenshots, which show the app reading those same invented reports.
 !samples/**
 !arogya_vahi/web/**
+!docs/shots/**
 
 # Python and tooling
 __pycache__/

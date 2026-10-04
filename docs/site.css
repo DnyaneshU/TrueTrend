@@ -1,0 +1,476 @@
+/* The project page. Same palette as the app, laid out for reading rather than using. */
+
+:root {
+  --bg: #080b12;
+  --bg-2: #0b0f18;
+  --panel: #111725;
+  --panel-2: #161d2e;
+  --line: #222b40;
+  --line-soft: #19202f;
+
+  --text: #e9edf6;
+  --text-2: #98a3bb;
+  --text-3: #5f6a80;
+
+  --accent: #2ad4c4;
+  --accent-2: #4b8cff;
+  --accent-ink: #042520;
+  --up: #ff5d8f;
+  --warn: #f0a93b;
+
+  --read: 44rem;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mr: "Noto Sans Devanagari", "Nirmala UI", var(--font);
+  --font-num: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image: radial-gradient(ellipse 70% 40% at 15% -5%, #2ad4c40f, transparent 62%),
+    radial-gradient(ellipse 60% 35% at 92% 2%, #4b8cff0c, transparent 60%);
+  background-attachment: fixed;
+  color: var(--text);
+  font: 400 17px/1.65 var(--font);
+  overflow-x: hidden;
+}
+
+[lang="mr"] {
+  font-family: var(--font-mr);
+  line-height: 1.85;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: #2ad4c455;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-color: var(--accent);
+}
+
+code {
+  font-family: var(--font-num);
+  font-size: 0.9em;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: #080b12d9;
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.brand b {
+  display: block;
+  background: linear-gradient(100deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.brand small {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.72rem;
+}
+
+.top nav {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.top nav a {
+  padding: 0.45rem 0.8rem;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+}
+
+.top nav a:hover {
+  background: var(--panel);
+  color: var(--text);
+}
+
+.top nav .ghost {
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- hero */
+
+.hero {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 4.5rem 1.4rem 3rem;
+  text-align: center;
+}
+
+.kicker {
+  margin: 0 0 1.2rem;
+  color: var(--text-3);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 1.4rem;
+  font-size: clamp(1.9rem, 5vw, 3.2rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+}
+
+.lit {
+  background: linear-gradient(100deg, var(--accent), #44b9f0 55%, var(--accent-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lede {
+  max-width: var(--read);
+  margin: 0 auto 1.8rem;
+  color: var(--text-2);
+  font-size: 1.08rem;
+}
+
+.lede strong {
+  color: var(--text);
+}
+
+/* The claim the whole project rests on. */
+.vow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 2rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid #1d4a47;
+  border-radius: 999px;
+  background: #2ad4c40c;
+  color: var(--accent);
+  font-size: 0.93rem;
+  font-weight: 600;
+}
+
+.cta {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 1.3rem;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: transform 0.12s var(--ease), background 0.15s var(--ease);
+}
+
+.btn:hover {
+  background: #202a3f;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  border-color: transparent;
+  background: linear-gradient(100deg, var(--accent), #35b8e8 70%, var(--accent-2));
+  color: var(--accent-ink);
+  font-weight: 700;
+  box-shadow: 0 10px 28px -16px var(--accent);
+}
+
+.btn--primary:hover {
+  background: linear-gradient(100deg, #3ee5d5, #46c6f2 70%, #5c98ff);
+}
+
+/* ---------------------------------------------------------------- screenshots */
+
+.shot {
+  margin: 2.6rem auto 0;
+  max-width: 62rem;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 30px 70px -40px #000, 0 0 0 1px #ffffff08;
+}
+
+.shot--hero {
+  margin-top: 3.4rem;
+}
+
+/* ---------------------------------------------------------------- the numbers */
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  max-width: 62rem;
+  margin: 3.5rem auto;
+  padding: 0 1.4rem;
+}
+
+.strip div {
+  padding: 1.4rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  text-align: center;
+}
+
+.strip b {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--accent);
+  font: 700 1.75rem/1 var(--font-num);
+  letter-spacing: -0.03em;
+}
+
+.strip span {
+  color: var(--text-3);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------- sections */
+
+.band {
+  padding: 3.6rem 1.4rem;
+}
+
+.band--alt {
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg-2);
+}
+
+h2 {
+  max-width: var(--read);
+  margin: 0 auto 1rem;
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.02rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.wide {
+  max-width: var(--read);
+  margin: 0 auto 1.2rem;
+  color: var(--text-2);
+}
+
+.wide strong,
+.wide em {
+  color: var(--text);
+}
+
+.small {
+  font-size: 0.92rem;
+}
+
+.note {
+  padding: 0.9rem 1.2rem;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--warn);
+  border-radius: 8px;
+  background: #f0a93b0a;
+}
+
+/* Three things said side by side. */
+.rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  max-width: 62rem;
+  margin: 2rem auto 0;
+}
+
+.rules div {
+  padding: 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
+}
+
+.rules p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.93rem;
+}
+
+/* ---------------------------------------------------------------- questions */
+
+.qa {
+  max-width: var(--read);
+  margin: 2rem auto 0;
+}
+
+.q {
+  margin: 1.4rem 0 0.6rem;
+  padding-left: 1.1rem;
+  border-left: 2px solid var(--line);
+  color: var(--text-3);
+  font-size: 0.96rem;
+}
+
+.q::before {
+  content: "“";
+}
+
+.q::after {
+  content: "”";
+}
+
+.a {
+  padding: 1rem 1.3rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: linear-gradient(100deg, #2ad4c40a, transparent 60%);
+  font-size: 1rem;
+}
+
+.a--lost {
+  border-left-color: var(--warn);
+  background: linear-gradient(100deg, #f0a93b0a, transparent 60%);
+}
+
+.from {
+  display: block;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 0.78rem;
+}
+
+/* ---------------------------------------------------------------- code */
+
+.maths,
+.code {
+  max-width: var(--read);
+  margin: 1.6rem auto;
+  padding: 1.1rem 1.3rem;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #0a0e17;
+  color: var(--text-2);
+  font-size: 0.88rem;
+  line-height: 1.75;
+}
+
+.maths code,
+.code code {
+  font-family: var(--font-num);
+}
+
+.code .c {
+  color: var(--text-3);
+}
+
+/* ---------------------------------------------------------------- limits */
+
+.limits {
+  padding-left: 1.2rem;
+}
+
+.limits li {
+  margin-bottom: 0.7rem;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+footer {
+  max-width: var(--read);
+  margin: 0 auto;
+  padding: 3rem 1.4rem 4rem;
+  color: var(--text-3);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+footer p {
+  margin: 0 0 0.5rem;
+}
+
+@media (max-width: 40rem) {
+  .brand small,
+  .top nav a:not(.ghost) {
+    display: none;
+  }
+  .hero {
+    padding-top: 3rem;
+  }
+}

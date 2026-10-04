@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#080b12" />
+    <title>Arogya Vahi — lab reports that never speak a number they can't prove</title>
+    <meta
+      name="description"
+      content="Every lab report a family has, in one place, read by Gemma 4 on a home laptop. It never speaks a number it can't find in the report."
+    />
+    <meta property="og:title" content="Arogya Vahi (आरोग्य वही)" />
+    <meta
+      property="og:description"
+      content="My mother has three years of blood reports in WhatsApp. This reads them, says what really changed, and explains it in Marathi — entirely on a laptop."
+    />
+    <meta property="og:image" content="shots/summary.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+
+  <body>
+    <header class="top">
+      <a class="brand" href="#">
+        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="5.5" y="3.5" width="21" height="25" rx="3" fill="none"
+                stroke="currentColor" stroke-width="1.7" />
+          <path d="M10.5 3.5v25" stroke="currentColor" stroke-width="1.7" opacity=".45" />
+          <path d="M13.5 21.5l4-5.5 3 2.2 4.5-7" fill="none" stroke="currentColor"
+                stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span><b>Arogya Vahi</b><small>आरोग्य वही</small></span>
+      </a>
+      <nav>
+        <a href="#how">How it works</a>
+        <a href="#promise">The promise</a>
+        <a href="#run">Run it</a>
+        <a class="ghost" href="https://github.com/DnyaneshU/TrueTrend">GitHub</a>
+      </nav>
+    </header>
+
+    <main>
+      <!-- ---------------------------------------------------------------- hero -->
+      <section class="hero">
+        <p class="kicker">Hacktoberfest Weekend Challenge · Build for a Friend</p>
+        <h1>
+          My mother has three years of blood reports in WhatsApp.<br />
+          <span class="lit">This finally lets her read them.</span>
+        </h1>
+        <p class="lede">
+          Arogya Vahi keeps every lab report a family has, builds one timeline per test
+          across labs, says whether a change is <em>real</em> or just normal variation, and
+          explains it in Marathi — out loud. It runs on a home laptop with
+          <strong>Gemma 4</strong>, and the reports never leave it.
+        </p>
+
+        <p class="vow">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2.8l6.8 2.9v5.6c0 4.4-2.9 8-6.8 9.6-3.9-1.6-6.8-5.2-6.8-9.6V5.7L12 2.8z"
+                  fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+            <path d="M8.9 12.1l2.2 2.2 4-4.4" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          It never speaks a number it can't find in the report.
+        </p>
+
+        <div class="cta">
+          <a class="btn btn--primary" href="https://github.com/DnyaneshU/TrueTrend">
+            Read the code
+          </a>
+          <a class="btn" href="#run">Run it yourself</a>
+        </div>
+
+        <figure class="shot shot--hero">
+          <img src="shots/summary.png" alt="The summary screen: three Marathi sentences about what changed, with a Listen button and questions for the doctor." />
+        </figure>
+      </section>
+
+      <!-- ---------------------------------------------------------------- numbers -->
+      <section class="strip">
+        <div><b>35 / 35</b><span>values verified against the source PDF</span></div>
+        <div><b>601</b><span>tests, none of which touch the network</span></div>
+        <div><b>0</b><span>bytes of her data sent anywhere</span></div>
+        <div><b>15</b><span>tests read, with sourced variation constants</span></div>
+      </section>
+
+      <!-- ---------------------------------------------------------------- the promise -->
+      <section id="promise" class="band">
+        <h2>The promise, and what it cost</h2>
+        <p class="wide">
+          A language model reading a lab report will sometimes produce a number that is not
+          on the page. Not often — often enough that if the app says <em>6.9</em> and the
+          report says <em>8.9</em>, I have built something worse than the problem. So the
+          model is not allowed to produce numbers at all.
+        </p>
+
+        <div class="rules">
+          <div>
+            <h3>Gemma proposes. Python verifies.</h3>
+            <p>
+              A value is marked <code>verified</code> only if it appears as its own word on
+              that page with the same qualifier, <em>ends its cell</em> in the table, sits in
+              a row that names the test, and has its unit printed in that row. The normal
+              range counts only when both its limits are printed there too.
+            </p>
+          </div>
+          <div>
+            <h3>Anything unproven is never spoken.</h3>
+            <p>
+              A value that fails goes to a queue for a person to confirm against the
+              original. It is never charted, never summarised, never read aloud, and never
+              used in an answer — it is shown as <em>“please check”</em> until someone says.
+            </p>
+          </div>
+          <div>
+            <h3>Templates that cannot hold a digit.</h3>
+            <p>
+              Every sentence the app says is a template with placeholders, and a test
+              enforces that none of them contains a digit of its own. Every number is
+              inserted by code, from a value already located in a PDF.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------------------------------------------------------------- ask -->
+      <section id="ask" class="band band--alt">
+        <h2>She asks in her own words</h2>
+        <p class="wide">
+          Gemma never writes the answer. It reads the question and returns two things — which
+          test, and which of five question types — as a constrained schema checked against the
+          catalog. Code builds the sentence from stored, verified values.
+        </p>
+
+        <div class="qa">
+          <div class="q" lang="mr">माझी साखर वाढली आहे का?</div>
+          <div class="a" lang="mr">
+            HbA1c (सरासरी साखर): २० मे २०२६ रोजी ७.६ %, आता ८.९ % — आकडा वाढला आहे.
+            <span class="from">From: 12 Jan 2026 – 28 Sep 2026 · 3 reports</span>
+          </div>
+
+          <div class="q">is my cholesterol normal?</div>
+          <div class="a">
+            Total cholesterol: it is 236 mg/dL, above the lab's upper limit (200). Worth
+            asking the doctor about.
+            <span class="from">From: 28 Sep 2026 · Maitri Pathology Laboratory</span>
+          </div>
+
+          <div class="q">what should I eat today?</div>
+          <div class="a a--lost">
+            I did not follow that question. Which test did you mean?
+            <span class="from">Not guessed at — the app says when it does not know.</span>
+          </div>
+        </div>
+
+        <figure class="shot">
+          <img src="shots/ask.png" alt="The Ask screen with a Marathi question and its answer, showing which reports the answer came from." />
+        </figure>
+      </section>
+
+      <!-- ---------------------------------------------------------------- real change -->
+      <section id="how" class="band">
+        <h2>Real change, or just noise?</h2>
+        <p class="wide">
+          Blood values move between tests even when nothing has changed. If the app cried
+          “your cholesterol went up!” at a 4% wobble, she would worry about nothing — and
+          then ignore it when it mattered. So it compares every difference against the
+          <strong>Reference Change Value</strong> for that specific test.
+        </p>
+
+        <pre class="maths"><code>σ = √ln(1 + CV²)        where CV = √(CVa² + CVi²)
+rise = e^(1.96·√2·σ) − 1
+fall = 1 − e^(−1.96·√2·σ)</code></pre>
+
+        <p class="wide small">
+          The log-normal form EFLM recommends, because a 30% rise and a 30% fall are not
+          equally surprising. Every CVi comes from the
+          <a href="https://biologicalvariation.eu/">EFLM Biological Variation Database</a>,
+          with its URL and access date in the data file. Where no published value exists —
+          post-prandial glucose — <strong>the app never judges that test</strong>. It says
+          “not compared” rather than inventing a constant.
+        </p>
+
+        <figure class="shot">
+          <img src="shots/changes.png" alt="The Changes screen: one row per test with its latest value and a verdict — real increase, normal variation, or not compared." />
+        </figure>
+      </section>
+
+      <!-- ---------------------------------------------------------------- local -->
+      <section class="band band--alt">
+        <h2>Why it runs on a laptop</h2>
+        <div class="rules">
+          <div>
+            <h3>Because of what the data is.</h3>
+            <p>
+              This is my mother's HbA1c, her thyroid, her haemoglobin, over three years.
+              Sending it to a company so it can be summarised is a trade I am not entitled to
+              make for her.
+            </p>
+          </div>
+          <div>
+            <h3>Because the pipeline had to be mine.</h3>
+            <p>
+              The promise is only keepable if I control every step between the PDF and the
+              sentence — raw page text, constrained decoding, rejection, re-verification. An
+              API that hands back prose gives you none of those seams.
+            </p>
+          </div>
+          <div>
+            <h3>Because it has to work in a power cut.</h3>
+            <p>
+              Only one step in the whole app needs the internet: downloading the Marathi
+              voice, once. After that a laptop with no connection reads reports perfectly.
+            </p>
+          </div>
+        </div>
+        <p class="wide small">
+          Gemma 4 runs through <a href="https://ollama.com">Ollama</a> on
+          <code>127.0.0.1</code>. A non-loopback host is refused unless explicitly overridden,
+          and <code>OLLAMA_HOST</code> from the environment is ignored, so a stray shell
+          variable cannot quietly send her reports elsewhere.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------------------- run it -->
+      <section id="run" class="band">
+        <h2>Run it yourself</h2>
+        <p class="wide">
+          It ships with four synthetic sample reports — three labs, three layouts, one
+          invented family — so you need nobody's real data to try it.
+        </p>
+
+        <pre class="code"><code>git clone https://github.com/DnyaneshU/TrueTrend
+cd TrueTrend
+pip install -e ".[voice]"
+
+ollama pull gemma4:e4b
+arogya-voice install          <span class="c"># the Marathi voice, ~77 MB, once</span>
+arogya-serve</code></pre>
+
+        <p class="wide small">
+          Open <code>http://127.0.0.1:8000</code>, make an account, and add the PDFs from
+          <code>samples/</code>. Needs Python 3.11+, about 6 GB of free RAM, and roughly 30
+          seconds a page.
+        </p>
+
+        <p class="wide small note">
+          <strong>There is no hosted demo, on purpose.</strong> Putting this on a server
+          would mean uploading someone's medical reports to a machine they don't own — which
+          is the thing the project exists to avoid. It runs where the reports already are.
+        </p>
+      </section>
+
+      <!-- ---------------------------------------------------------------- limits -->
+      <section class="band band--alt">
+        <h2>What it does not do</h2>
+        <ul class="limits wide">
+          <li><strong>No medical advice.</strong> Only: this value against that lab's printed range, this change against normal variation, and “ask your doctor”.</li>
+          <li><strong>15 tests</strong> are read. Anything else is ignored rather than guessed at.</li>
+          <li><strong>Scanned pages are never machine-verified</strong> — there is no text layer to check against, so those values always wait for a person.</li>
+          <li><strong>Seven between-lab CVs are from a 2006 survey.</strong> They're old; they're also conservative, which errs toward <em>not</em> calling a change real.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Built in a weekend for the
+        <a href="https://dev.to/challenges/hacktoberfest-weekend-2026-10-01">DEV Hacktoberfest Weekend Challenge</a>,
+        by <a href="https://github.com/DnyaneshU">Dnyanesh Ujalambkar</a>.
+      </p>
+      <p class="small">
+        Gemma 4 · Ollama · Piper · PyMuPDF · FastAPI. The sample reports are invented; no
+        real person's results appear anywhere in this repository.
+      </p>
+    </footer>
+  </body>
+</html>
