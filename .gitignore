@@ -40,6 +40,11 @@ dist/
 .idea/
 .vscode/
 
+# The submission: the DEV post and the demo notes are written for the challenge,
+# not part of the app, and the tunnel binary is a 50 MB download, not source.
+submission/
+*.exe
+
 # Development notes and AI-assistant working files: kept locally, not part of the app
 CLAUDE.md
 docs/superpowers/

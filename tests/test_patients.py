@@ -235,3 +235,27 @@ def test_summary_compares_spellings_of_one_patient(conn, capsys):
     assert summary_main(["--json"]) == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary["reports_left_out"] == 0 and len(summary["changes"]) == 1
+
+
+def test_two_requests_matching_at_once_do_not_each_add_the_same_patient(storage):
+    # The server answers requests on several threads, and more than one screen asks for
+    # the patient list. Without one writer at a time, each would read "no such patient"
+    # and add her again, splitting one person's history across copies of her.
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import closing
+
+    with closing(db.connect()) as setup:
+        for sha, date in (("a", "2026-01-12"), ("b", "2026-05-20"), ("c", "2026-09-28")):
+            saved_report(conn=setup, sha256=sha, sample_date=date,
+                         patient_name_raw="Mrs. Sunita Patil", patient_sex_raw="F")
+
+    def match_in_its_own_connection():
+        with closing(db.connect()) as conn:
+            patients.match_saved(conn)
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        for job in [pool.submit(match_in_its_own_connection) for _ in range(4)]:
+            job.result()
+
+    with closing(db.connect()) as conn:
+        assert len(db.patients(conn)) == 1, "one person, however many requests arrive at once"

@@ -100,6 +100,12 @@
                 stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
           <circle cx="12" cy="16.3" r="0.9" fill="currentColor" />
         </symbol>
+        <symbol id="i-mic" viewBox="0 0 24 24">
+          <rect x="9" y="3" width="6" height="11" rx="3" fill="none"
+                stroke="currentColor" stroke-width="1.6" />
+          <path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" />
+        </symbol>
         <symbol id="i-page" viewBox="0 0 24 24">
           <path d="M6 3.5h7.5L18 8v12.5H6z" fill="none" stroke="currentColor"
                 stroke-width="1.6" stroke-linejoin="round" />
@@ -333,6 +339,12 @@
               <form id="question-form" class="asker">
                 <input id="question-input" type="text" autocomplete="off"
                        placeholder="माझी साखर वाढली आहे का?" aria-label="Your question" />
+                <!-- Not built yet, and says so rather than looking like it works. -->
+                <button class="btn icon-btn btn--soon" type="button" id="question-mic" disabled
+                        title="Speaking your question is not built yet"
+                        aria-label="Ask by speaking (not built yet)">
+                  <svg width="19" height="19"><use href="#i-mic" /></svg>
+                </button>
                 <button class="btn btn--primary" type="submit" id="question-send">Ask</button>
               </form>
 

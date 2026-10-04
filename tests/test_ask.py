@@ -58,13 +58,25 @@ def sugar(conn):
 # ---------------------------------------------------------------- the promise
 
 
-def test_no_phrase_the_app_can_say_contains_a_number_of_its_own(reads):
+@pytest.mark.parametrize("language", ["mr", "en"])
+def test_no_phrase_the_app_can_say_contains_a_number_of_its_own(language):
     # Every number in an answer must come from a report. A digit written into a phrase
     # here would be spoken as fact without ever having been in one.
-    for key, phrase in ask.PHRASES.answers.items():
-        assert not DIGIT.search(phrase), f"answers.{key} has a digit of its own"
-    for key, phrase in ask.PHRASES.said.items():
-        assert not DIGIT.search(phrase), f"said.{key} has a digit of its own"
+    phrases = ask.PHRASES[language]
+    for group, named in (("answers", phrases.answers), ("said", phrases.said)):
+        for key, phrase in named.items():
+            assert not DIGIT.search(phrase), f"{language}: {group}.{key} has a digit of its own"
+
+
+def test_the_two_languages_say_the_same_things_in_the_same_places():
+    # A key missing from one file is a KeyError in front of her, and a placeholder that
+    # differs is a sentence with a hole in it. Both files have to stay in step.
+    mr, en = ask.PHRASES["mr"], ask.PHRASES["en"]
+    assert set(mr.answers) == set(en.answers)
+    assert set(mr.said) == set(en.said)
+    for key in mr.answers:
+        slots = lambda text: set(re.findall(r"\{(\w+)\}", text))  # noqa: E731
+        assert slots(mr.answers[key]) == slots(en.answers[key]), f"{key} uses different placeholders"
 
 
 def test_gemma_is_never_shown_a_value(reads, conn, sugar):
@@ -187,3 +199,55 @@ def test_when_was_my_last_test_needs_no_test_named(reads, conn, sugar):
     reads(None, "when")  # a real question that names no test
     said = ask.answer(conn, "शेवटची तपासणी कधी झाली?")
     assert said.understood and "२८ सप्टेंबर २०२६" in said.sentences[0]
+
+
+# ---------------------------------------------------------------- the language it answers in
+
+
+def test_a_marathi_question_is_answered_in_marathi(reads, conn, sugar):
+    reads("HBA1C", "latest")
+    said = ask.answer(conn, "माझी साखर किती आहे?")
+    assert said.language == "mr"
+    assert "८.९" in said.sentences[0]  # Devanagari digits, as her reports read
+
+
+def test_an_english_question_is_answered_in_english(reads, conn, sugar):
+    reads("HBA1C", "latest")
+    said = ask.answer(conn, "what is my sugar now?")
+    assert said.language == "en"
+    assert said.sentences[0].startswith("HbA1c:")  # the English name of the test
+    assert "8.9 %" in said.sentences[0] and "28 Sep 2026" in said.sentences[0]
+
+
+def test_an_english_question_about_a_change_reads_as_english(reads, conn, sugar):
+    reads("HBA1C", "changed")
+    said = ask.answer(conn, "has my sugar gone up?")
+    assert "7.6 %" in said.sentences[0] and "gone up" in said.sentences[0]
+
+
+def test_an_english_question_outside_the_range_says_so_in_english(reads, conn, sugar):
+    reads("HBA1C", "in_range")
+    said = ask.answer(conn, "is it normal?")
+    assert "above the lab's upper limit" in said.sentences[0] and "5.6" in said.sentences[0]
+
+
+def test_a_question_mixing_the_scripts_is_answered_in_marathi(reads, conn, sugar):
+    # "HbA1c वाढलं का?" is a Marathi question that happens to carry an English test name.
+    reads("HBA1C", "changed")
+    said = ask.answer(conn, "HbA1c वाढलं का?")
+    assert said.language == "mr" and "वाढला आहे" in said.sentences[0]
+
+
+def test_an_english_question_it_cannot_place_is_refused_in_english(reads, conn, sugar):
+    reads(None, None)
+    said = ask.answer(conn, "what should I eat today?")
+    assert not said.understood and said.language == "en"
+    assert "did not follow" in said.sentences[0]
+    assert said.suggestions == ["HbA1c"]  # named in English too
+
+
+def test_the_history_is_listed_in_english_dates(reads, conn, sugar):
+    reads("HBA1C", "history")
+    said = ask.answer(conn, "show me all the readings")
+    assert "3 reports" in said.sentences[0]
+    assert "12 Jan 2026" in said.sentences[0] and "6.8 %" in said.sentences[0]

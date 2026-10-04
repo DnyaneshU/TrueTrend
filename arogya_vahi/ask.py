@@ -18,13 +18,20 @@ names the test, the date and the lab it came from.
 
 A question it cannot place is not guessed at: it says it did not understand, and offers
 the tests this person actually has.
+
+The answer comes back in the language the question was asked in: she asks in Marathi and
+is answered in Marathi, and anyone checking the app in English is answered in English.
+The two sets of phrases are data/ask_mr.toml and data/ask_en.toml, and they must carry
+the same keys and the same placeholders -- there is a test for that.
 """
 
 import argparse
 import logging
+import re
 import sqlite3
 import sys
 from contextlib import closing
+from datetime import date
 from typing import Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 # What a question can be about. Each one has a template in data/ask_mr.toml, and code
 # that fills it from saved results: adding one means adding both, never a free sentence.
+Language = Literal["mr", "en"]  # answered in the language the question was asked in
+
 Topic = Literal[
     "latest",  # "what is my sugar now?"
     "changed",  # "has it gone up?"
@@ -69,16 +78,17 @@ class Answer(BaseModel):
 
     question: str  # as she asked it
     understood: bool  # False: the app says so rather than guessing
+    language: Language = "mr"  # the language it is answered in: the one it was asked in
     test_code: str | None = None
-    test_name: str | None = None  # in Marathi, as the answer says it
+    test_name: str | None = None  # as the answer names it
     topic: Topic | None = None
-    sentences: list[str] = Field(default_factory=list)  # Marathi, every number from a report
+    sentences: list[str] = Field(default_factory=list)  # every number in them is from a report
     points: list[TimelinePoint] = Field(default_factory=list)  # what the answer is built from
     suggestions: list[str] = Field(default_factory=list)  # tests this person has, when lost
 
 
 class Phrases(BaseModel):
-    """data/ask_mr.toml: what the answer can say. Every number in them is a placeholder."""
+    """One language's worth of what the answer can say. Every number in them is a placeholder."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -86,11 +96,62 @@ class Phrases(BaseModel):
     said: dict[str, str]
 
     @classmethod
-    def load(cls) -> "Phrases":
-        return cls.model_validate(load_toml("ask_mr.toml"))
+    def load(cls, language: str) -> "Phrases":
+        return cls.model_validate(load_toml(f"ask_{language}.toml"))
 
 
-PHRASES = Phrases.load()
+PHRASES: dict[str, Phrases] = {language: Phrases.load(language) for language in get_args(Language)}
+# Month names that never change with the computer's locale.
+_MONTHS_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_DEVANAGARI = re.compile(r"[\u0900-\u097f]")
+
+
+def language_of(question: str) -> Language:
+    """Which language to answer in: the one the question is written in.
+
+    One Devanagari letter is enough. A question typed in Marathi often carries an English
+    test name ("HbA1c वाढलं का?"), and it should still be answered in Marathi; an English
+    question has no Devanagari in it at all.
+    """
+    return "mr" if _DEVANAGARI.search(question) else "en"
+
+
+class Voice:
+    """The phrases and the number-writing of one language, so nothing has to pass a flag."""
+
+    def __init__(self, language: Language):
+        self.language = language
+        self.phrases = PHRASES[language]
+
+    def say(self, key: str, **slots: str) -> str:
+        """One phrase, with its placeholders filled by code."""
+        return self.phrases.answers[key].format(**slots)
+
+    def moved(self, kind: str) -> str:
+        """Which way a value moved: "वाढला आहे", or "gone up"."""
+        return self.phrases.said[kind]
+
+    def number(self, text: str) -> str:
+        """A number as this language writes it: Devanagari digits for Marathi."""
+        return marathi.digits(text) if self.language == "mr" else text
+
+    def day(self, when: date) -> str:
+        """A date as this language writes it: "१५ एप्रिल २०२६", or "15 Apr 2026"."""
+        if self.language == "mr":
+            return marathi.day(when)
+        # Built by hand rather than with strftime: "%-d" is not portable, and the month
+        # names must not change with the computer's locale.
+        return f"{when.day} {_MONTHS_EN[when.month - 1]} {when.year}"
+
+    def value(self, point: TimelinePoint) -> str:
+        """A saved value exactly as its report prints it."""
+        unit = point.unit or point.unit_std or ""
+        return f"{self.number(point.value_text)} {unit}".strip()
+
+    def test_name(self, code: str) -> str:
+        """How this language names a test."""
+        test = CATALOG.test(code)
+        return test.name_mr if self.language == "mr" else test.name
 
 
 def _known(code: str) -> bool:
@@ -98,80 +159,76 @@ def _known(code: str) -> bool:
     return any(test.code == code for test in CATALOG.tests)
 
 
-def _value(point: TimelinePoint) -> str:
-    """A saved value exactly as its report prints it, in Devanagari digits."""
-    unit = point.unit or point.unit_std or ""
-    return f"{marathi.digits(point.value_text)} {unit}".strip()
-
-
-def _say(key: str, **slots: str) -> str:
-    """One phrase, with its placeholders filled by code."""
-    return PHRASES.answers[key].format(**slots)
-
-
-def _latest(points: list[TimelinePoint]) -> str:
+def _latest(voice: Voice, points: list[TimelinePoint]) -> str:
     last = points[-1]
-    return _say("latest", value=_value(last), date=marathi.day(last.sample_date), lab=last.lab_name or "")
+    return voice.say(
+        "latest", value=voice.value(last), date=voice.day(last.sample_date), lab=last.lab_name or ""
+    )
 
 
-def _changed(points: list[TimelinePoint], changes: list[Change]) -> list[str]:
+def _changed(voice: Voice, points: list[TimelinePoint], changes: list[Change]) -> list[str]:
     """What the newest comparison says, in the words the summary already uses."""
     if not changes:
-        return [_say("only_one")]
+        return [voice.say("only_one")]
     change = changes[-1]
-    said = PHRASES.said[change.kind]  # "वाढला आहे" / "कमी झाला आहे" / "तेवढाच आहे"
     lines = [
-        _say(
+        voice.say(
             "changed",
-            before=_value(change.before),
-            before_date=marathi.day(change.before.sample_date),
-            after=_value(change.after),
-            said=said,
+            before=voice.value(change.before),
+            before_date=voice.day(change.before.sample_date),
+            after=voice.value(change.after),
+            said=voice.moved(change.kind),
         )
     ]
     if change.kind == "within_normal_variation":
-        lines.append(_say("within_variation"))
+        lines.append(voice.say("within_variation"))
     elif change.kind == "not_judged":
-        lines.append(_say("not_judged"))
+        lines.append(voice.say("not_judged"))
     return lines
 
 
-def _in_range(points: list[TimelinePoint]) -> list[str]:
+def _in_range(voice: Voice, points: list[TimelinePoint]) -> list[str]:
     """Against the lab's own printed range -- never against anyone else's idea of normal."""
     last = points[-1]
     if not last.ref_verified or last.value_std is None:
-        return [_latest(points), _say("no_range")]
+        return [_latest(voice, points), voice.say("no_range")]
     low, high = last.ref_low, last.ref_high
     if high is not None and last.value_std > high:
-        return [_say("above", value=_value(last), limit=marathi.number(high))]
+        return [voice.say("above", value=voice.value(last), limit=voice.number(_plain(high)))]
     if low is not None and last.value_std < low:
-        return [_say("below", value=_value(last), limit=marathi.number(low))]
-    return [_say("inside", value=_value(last), range=marathi.digits(last.ref_text or ""))]
+        return [voice.say("below", value=voice.value(last), limit=voice.number(_plain(low)))]
+    return [voice.say("inside", value=voice.value(last), range=voice.number(last.ref_text or ""))]
 
 
-def _history(points: list[TimelinePoint]) -> list[str]:
+def _history(voice: Voice, points: list[TimelinePoint]) -> list[str]:
     """Every reading, oldest first, each with its date: the whole answer is quotation."""
-    said = ", ".join(f"{marathi.day(p.sample_date)} — {_value(p)}" for p in points)
-    return [_say("history", count=marathi.number(len(points)), readings=said)]
+    said = ", ".join(f"{voice.day(p.sample_date)} — {voice.value(p)}" for p in points)
+    return [voice.say("history", count=voice.number(str(len(points))), readings=said)]
 
 
-def _when(points: list[TimelinePoint]) -> list[str]:
+def _when(voice: Voice, points: list[TimelinePoint]) -> list[str]:
     last = points[-1]
-    return [_say("when", date=marathi.day(last.sample_date), lab=last.lab_name or "")]
+    return [voice.say("when", date=voice.day(last.sample_date), lab=last.lab_name or "")]
 
 
-def _answer_about(topic: str, timeline: Timeline) -> list[str]:
+def _plain(value: float) -> str:
+    """A number without trailing zeros: 5.60 -> "5.6"."""
+    text = f"{value:.6f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _answer_about(voice: Voice, topic: str, timeline: Timeline) -> list[str]:
     """The sentences for one topic, built from this test's saved results."""
     points = timeline.points
     if topic == "latest":
-        return [_latest(points)]
+        return [_latest(voice, points)]
     if topic == "changed":
-        return _changed(points, timeline.changes)
+        return _changed(voice, points, timeline.changes)
     if topic == "in_range":
-        return _in_range(points)
+        return _in_range(voice, points)
     if topic == "history":
-        return _history(points)
-    return _when(points)
+        return _history(voice, points)
+    return _when(voice, points)
 
 
 def read_question(question: str, model: str | None = None) -> Reading:
@@ -191,6 +248,7 @@ def answer(
     if not question.strip():
         raise UserError("Please type a question.")
 
+    voice = Voice(language_of(question))  # answered in the language it was asked in
     patient_id = patient_id if patient_id is not None else db.latest_patient_id(conn)
     timelines = every_timeline(db.timeline_points(conn, patient_id))
     have = {timeline.code: timeline for timeline in timelines}
@@ -200,7 +258,9 @@ def answer(
     lost = Answer(
         question=question,
         understood=False,
-        suggestions=[t.name_mr for t in timelines],  # what she can actually ask about
+        language=voice.language,
+        # What she can actually ask about, named the way this answer names things.
+        suggestions=[voice.test_name(t.code) for t in timelines],
     )
 
     if read.topic == "when" and read.test_code is None and timelines:
@@ -210,46 +270,50 @@ def answer(
         return Answer(
             question=question,
             understood=True,
+            language=voice.language,
             topic="when",
-            sentences=[_say("when", date=marathi.day(newest.sample_date), lab=newest.lab_name or "")],
+            sentences=_when(voice, [newest]),
             points=[newest],
         )
 
     if read.test_code is None or read.topic is None:
         # The question could not be placed. Saying so is the right answer; guessing a
         # test and quoting its numbers would answer a question she did not ask.
-        return lost.model_copy(update={"sentences": [_say("not_understood")]})
+        return lost.model_copy(update={"sentences": [voice.say("not_understood")]})
 
     if timeline is None:
         # The test was understood, but there is no report of it: a different thing, and
         # she should hear which, or she will think the app did not follow her.
-        named = CATALOG.test(read.test_code).name_mr if _known(read.test_code) else None
-        said = _say("no_results")
+        named = voice.test_name(read.test_code) if _known(read.test_code) else None
+        said = voice.say("no_results")
         return lost.model_copy(
             update={"sentences": [f"{named}: {said}" if named else said], "test_code": read.test_code}
         )
 
+    named = voice.test_name(timeline.code)
     return Answer(
         question=question,
         understood=True,
+        language=voice.language,
         test_code=timeline.code,
-        test_name=timeline.name_mr,
+        test_name=named,
         topic=read.topic,
-        sentences=[f"{timeline.name_mr}: {line}" for line in _answer_about(read.topic, timeline)],
+        sentences=[f"{named}: {line}" for line in _answer_about(voice, read.topic, timeline)],
         points=timeline.points,
     )
 
 
 def _command(args: argparse.Namespace) -> int:
+    question = " ".join(args.question)
     with closing(db.connect()) as conn:
-        said = answer(conn, " ".join(args.question), patient_id=args.patient, model=args.model)
+        said = answer(conn, question, patient_id=args.patient, model=args.model)
     if args.json:
         print(said.model_dump_json(indent=2))
         return 0
     for line in said.sentences:
         print(line)
     if said.suggestions:
-        print("\n" + _say("you_could_ask") + " " + ", ".join(said.suggestions))
+        print("\n" + Voice(said.language).say("you_could_ask") + " " + ", ".join(said.suggestions))
     return 0
 
 

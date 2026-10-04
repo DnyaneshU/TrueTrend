@@ -366,9 +366,10 @@ async function askQuestion(question) {
       $("answer"),
       el(
         `div.answer${said.understood ? "" : ".answer--lost"}`,
-        // The sentences are Marathi built by the server from saved values; the page
-        // shows them as they came and adds nothing of its own.
-        ...said.sentences.map((line) => el("p", { lang: "mr" }, line)),
+        // The server answers in the language the question was asked in, and builds every
+        // sentence from saved values. The page shows them as they came, tagged with that
+        // language so Marathi gets the face that has its conjuncts.
+        ...said.sentences.map((line) => el("p", { lang: said.language }, line)),
         said.understood && sources(said.points),
         said.suggestions?.length &&
           el(

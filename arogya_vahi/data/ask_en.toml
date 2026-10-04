@@ -1,0 +1,50 @@
+# The English twin of ask_mr.toml: what the app says back when the question is asked in
+# English (arogya_vahi/ask.py). She asks in Marathi and is answered in Marathi; anyone
+# checking the app in English is answered in English.
+#
+# Every key here must also be in ask_mr.toml, with the same placeholders, and neither
+# file may contain a digit of its own -- there are tests for both. Gemma writes none of
+# this: it only says which test and what kind of question, and code fills the numbers
+# from saved, verified results.
+#
+# Placeholders:
+#   {value} {before} {after}   a reading, with the unit its report printed
+#   {date} {before_date}       its sample date
+#   {lab}                      the lab that printed it
+#   {limit} {range}            the lab's own printed range, or the limit it is outside
+#   {count} {readings}         how many readings, and all of them with their dates
+#   {said}                     from [said] below: which way it moved
+
+[answers]
+# What a reading is now
+latest = "on {date} ({lab}) it was {value}."
+
+# Whether it changed
+changed = "{before} on {before_date}, now {after} — it has {said}."
+within_variation = "That difference is within the usual variation for this test, so it is not a real change."
+not_judged = "These two reports could not be compared with confidence."
+only_one = "There is only one report for this test, so there is nothing to compare it with."
+
+# Against the lab's printed range
+above = "it is {value}, above the lab's upper limit ({limit}). Worth asking the doctor about."
+below = "it is {value}, below the lab's lower limit ({limit}). Worth asking the doctor about."
+inside = "it is {value}, inside the lab's range ({range})."
+no_range = "This report has no printed range for this test, so there is nothing to compare it with."
+
+# The whole history
+history = "there are {count} reports: {readings}."
+
+# When she was last tested
+when = "The last test was on {date} ({lab})."
+
+# When the question could not be placed
+not_understood = "I did not follow that question. Which test did you mean?"
+no_results = "there is no report for this test in the vahi yet."
+you_could_ask = "You could ask about:"
+
+[said]
+# Which way it moved, said plainly. The judgement itself is the change engine's.
+real_increase = "gone up"
+real_decrease = "come down"
+within_normal_variation = "stayed about the same"
+not_judged = "changed"
