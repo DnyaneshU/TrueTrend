@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     # The web app
     max_upload_bytes: int = 50 * 2**20  # a phone photo or a long report fits; a mistake doesn't
+    highlight_max_width: int = 1400  # pixels across for the page picture that marks a value
+    session_cookie: str = "arogya_session"  # where a browser keeps its sign-in token
 
     @property
     def db_path(self) -> Path:

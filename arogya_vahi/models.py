@@ -348,6 +348,22 @@ class Timeline(BaseModel):
     changes: list[Change]
 
 
+class Account(BaseModel):
+    """Who may open the app. Accounts exist only on this computer (arogya_vahi.accounts)."""
+
+    id: int
+    name: str
+    password_hash: str = Field(exclude=True)  # never leaves the database, never sent to a browser
+
+
+class Session(BaseModel):
+    """A signed-in device. The token is sent once, at sign-in, and stored only as its hash."""
+
+    token: str
+    name: str
+    account_id: int
+
+
 class Questions(BaseModel):
     """What a person is asked to decide; each answer is one API call."""
 
