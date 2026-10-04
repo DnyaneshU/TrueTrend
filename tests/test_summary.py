@@ -11,11 +11,11 @@ import re
 from datetime import date
 
 import pytest
-from factories import report_record, saved_result, timeline_point
+from factories import saved_report, saved_result, timeline_point
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi import db, marathi
+from arogya_vahi import marathi
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.summary import PRIORITY, TEMPLATES, Templates, main, summarize, template_placeholders
 
@@ -237,7 +237,8 @@ def test_another_persons_reports_are_left_out():
     father = timeline_point("HBA1C", 9.0, JAN, patient_id=2, patient_name="Mr. Ramesh Patil")
     summary = summarize([father, timeline_point("HBA1C", 7.0, APR, patient_name="SUNITA PATIL.")])
     assert (summary.other_people, summary.reports_left_out) == (["Mr. Ramesh Patil"], 1)
-    assert summary.changes == [] and summary.sentences == [sentence("first_report")]
+    # not "first report": there are earlier reports, just not this patient's (or not matched)
+    assert summary.changes == [] and summary.sentences == [sentence("not_compared")]
 
 
 @pytest.mark.parametrize("earlier, latest", [(None, 1), (1, None)])
@@ -295,8 +296,7 @@ def test_every_number_said_is_printed_on_a_report(history, code, low, high):
 
 
 def save(conn, sha256, sample_date, *results, patient="Sunita Patil"):
-    record = report_record(sha256=sha256, sample_date=sample_date, patient_name_raw=patient)
-    db.save_report(conn, record, list(results))
+    saved_report(conn, sha256, results, sample_date=sample_date, patient_name_raw=patient)
 
 
 def test_main_prints_the_summary_and_questions(conn, capsys):

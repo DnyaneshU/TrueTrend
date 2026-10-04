@@ -201,7 +201,7 @@ def test_a_report_read_again_stays_with_the_patient_set_by_hand(storage, fake_ge
     pdf = make_pdf([report_page])
     run(pdf)
     with closing(db.connect()) as conn:
-        patients.assign(conn, 1, "new")  # say Sunita Patil's report was really someone else's
+        patients.assign(conn, 1, None)  # say Sunita Patil's report was really someone else's
     assert run(pdf, force=True).patient_id == 2
 
 
@@ -210,7 +210,7 @@ def test_a_report_that_could_be_two_patients_is_saved_for_no_one(storage, use_ge
         for sha256, age in (("a", "62"), ("b", "8")):
             record = report_record(sha256=sha256, sample_date="2026-01-15", patient_age_raw=age)
             db.save_report(conn, record, [])
-        patients.match_unmatched(conn)
+        patients.match_saved(conn)
     use_gemma(FakeGemma({**GOOD_REPLY, "age": None, "sex": None, "patient_name": "Sunita Patil"}))
     out = run(make_pdf([report_page]))
     assert out.patient_id is None
@@ -251,6 +251,12 @@ def test_a_sample_date_not_printed_in_the_pdf_is_not_used(storage, use_gemma, ma
     assert (out.sample_date, out.sample_date_text) == (None, "12/08/2026 08:10")
     assert any("is not printed in the PDF's text" in w for w in out.warnings)
     assert query("SELECT sample_date FROM reports") == [(None,)]
+
+
+def test_a_sample_date_must_be_printed_whole(storage, use_gemma, make_pdf, report_page):
+    # "2/09/2026" is inside the printed "12/09/2026 08:10", but it is not what the report says
+    use_gemma(FakeGemma(first={**GOOD_REPLY, "sample_date": "2/09/2026"}))
+    assert run(make_pdf([report_page])).sample_date is None
 
 
 def test_the_original_is_stored_whole_even_over_a_damaged_copy(storage, fake_gemma, make_pdf, report_page):

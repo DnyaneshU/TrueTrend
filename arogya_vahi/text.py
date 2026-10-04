@@ -1,6 +1,7 @@
 """Text helpers shared by every step: how numbers, qualifiers, flags and names are printed."""
 
 import re
+import unicodedata
 from typing import Literal
 
 from arogya_vahi.lab_tests import CATALOG
@@ -47,16 +48,26 @@ def printed_number(word: str) -> tuple[Qualifier | None, float] | None:
     return (QUALIFIERS.get(match["qualifier"]), to_float(match["number"])) if match else None
 
 
-def same_name(a: str | None, b: str | None) -> bool:
-    """Two printed names (of a person or a lab) are the same, ignoring case, spacing and punctuation.
+def words(text: str) -> list[str]:
+    """A printed name's words: Unicode-normalised, casefolded, without punctuation.
 
-    An unknown name is never the same as another.
+    Letters, Devanagari vowel signs and digits are kept; invisible joiners are dropped, so
+    one spelling written two ways is one word.
     """
-    return bool(a and b) and _name_key(a) == _name_key(b)
+    normal = unicodedata.normalize("NFKC", text).casefold()
+    kept = "".join(
+        char if unicodedata.category(char)[0] in "LMN" else "" if unicodedata.category(char) == "Cf" else " "
+        for char in normal
+    )
+    return kept.split()
 
 
-def _name_key(name: str) -> str:
-    return " ".join(re.sub(r"[\W_]+", " ", name.casefold()).split())
+def same_name(a: str | None, b: str | None) -> bool:
+    """Two printed names of a lab are the same, ignoring case, spacing and punctuation.
+
+    An unknown name is never the same as another. People's names: arogya_vahi.people.
+    """
+    return bool(a and b) and words(a) == words(b)
 
 
 def to_float(number: str) -> float:

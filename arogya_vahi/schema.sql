@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS patients (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     display_name  TEXT NOT NULL,
     aliases_json  TEXT NOT NULL DEFAULT '[]',  -- other names printed on their reports
-    sex           TEXT,                        -- 'F' or 'M'
+    sex           TEXT CHECK (sex IN ('F', 'M')),
     birth_year    INTEGER                      -- estimated from a printed age, +/- 1 year
 );
 

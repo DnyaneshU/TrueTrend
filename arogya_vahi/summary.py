@@ -28,7 +28,6 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from arogya_vahi import cli, db, marathi, patients
 from arogya_vahi.change import timeline_changes, timelines
-from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.models import Change, Finding, FindingKind, Summary, TimelinePoint
 from arogya_vahi.normalize import parse_range
@@ -112,7 +111,7 @@ def summarize(points: Iterable[TimelinePoint]) -> Summary:
         sentences.append(TEMPLATES.sentences["to_check"].format(count=marathi.number(to_check)))
     if not sentences:
         dates = {point.sample_date for line in by_test.values() for point in line}
-        sentences.append(TEMPLATES.sentences[_quiet(current, changes, len(dates))])
+        sentences.append(TEMPLATES.sentences[_quiet(current, changes, len(dates), left_out)])
     return Summary(
         latest_sample_date=latest_date,
         sentences=sentences,
@@ -210,10 +209,16 @@ def _with_unit(number: str, unit: str | None) -> str:
     return f"{number} {unit}" if unit else number
 
 
-def _quiet(current: dict[str, list[TimelinePoint]], changes: dict[str, list[Change]], dates: int) -> str:
-    """Which sentence to say when nothing stands out."""
+def _quiet(
+    current: dict[str, list[TimelinePoint]], changes: dict[str, list[Change]], dates: int, left_out: int
+) -> str:
+    """Which sentence to say when nothing stands out.
+
+    "First report" only when it is: not when earlier reports were left out because they are
+    for someone else, or the latest report isn't matched to anyone.
+    """
     if dates == 1:
-        return "first_report"
+        return "not_compared" if left_out else "first_report"
     latest = [changes[code][-1].kind for code in current if changes[code]]
     if latest and all(kind == "within_normal_variation" for kind in latest):
         return "stable"
@@ -224,9 +229,9 @@ def _quiet(current: dict[str, list[TimelinePoint]], changes: dict[str, list[Chan
 
 def _command(args: argparse.Namespace) -> int:
     with closing(db.connect()) as conn:
-        patients.log_matches(patients.match_unmatched(conn))
-        if args.patient is not None and args.patient not in {patient.id for patient in db.patients(conn)}:
-            raise UserError(f"There is no patient #{args.patient}; see them with arogya-patients.")
+        patients.match_saved(conn)
+        if args.patient is not None:
+            patients.get(conn, args.patient)
         summary = summarize(db.timeline_points(conn, args.patient))
     if summary.reports_left_out:
         names = f" ({', '.join(summary.other_people)})" if summary.other_people else ""

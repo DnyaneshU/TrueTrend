@@ -144,6 +144,17 @@ class ReportRecord(BaseModel):
     raw_json: str  # Gemma's reply for every page
     patient_id: int | None = None  # who the report is for (arogya_vahi.patients); None: no one yet
 
+    @property
+    def person(self) -> "PrintedPerson":
+        """Who the report says it is for, as printed."""
+        return PrintedPerson(
+            name=self.patient_name_raw,
+            age=self.patient_age_raw,
+            sex=self.patient_sex_raw,
+            sample_date=self.sample_date,
+            report_date=self.report_date,
+        )
+
 
 class ReportOutput(BaseModel):
     """What `python -m arogya_vahi.extract` prints as JSON."""
@@ -180,17 +191,43 @@ class Patient(BaseModel):
     birth_year: int | None = None  # estimated from an age printed on a report: +/- 1 year
 
 
-class ReportPerson(BaseModel):
-    """Who a saved report says it is for, as printed, and who it was matched to."""
+class PrintedPerson(BaseModel):
+    """Who a report says it is for, as printed, and when (the age is as of then)."""
 
-    report_id: int
-    patient_id: int | None
     name: str | None
     age: str | None
     sex: str | None
     sample_date: str | None  # ISO YYYY-MM-DD
     report_date: str | None
+
+
+class ReportPerson(PrintedPerson):
+    """A saved report's printed person, and the patient it was matched to."""
+
+    report_id: int
+    patient_id: int | None
     lab_name: str | None
+
+
+class Match(BaseModel):
+    """Who a report was matched to: a patient (new or not), or no one and why."""
+
+    patient: Patient | None
+    new: bool = False
+    note: str | None = None  # something the user should know or fix
+
+
+class PatientReports(Patient):
+    """A patient and the reports matched to them, oldest sample first."""
+
+    reports: list[ReportPerson]
+
+
+class PatientListing(BaseModel):
+    """What arogya-patients lists: every patient, and the reports matched to no one."""
+
+    patients: list[PatientReports]
+    unmatched: list[ReportPerson]
 
 
 # --- Timelines and changes between reports.

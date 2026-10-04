@@ -91,18 +91,26 @@ Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck>`,
    case, punctuation, word order and titles ("Mrs. Sunita Patil" = "PATIL SUNITA"), and a
    middle initial only one of the two prints ("Sunita R. Patil" = "Sunita Patil"). Nothing
    else is guessed: "S. Patil" or "Sunita Ramesh Patil" is a new patient until
-   `arogya-patients merge` joins the two, and then that spelling is remembered. A
-   same-named patient of the other sex (printed, or from "Mr."/"Mrs."), or born more than
-   a year apart (from the printed ages), is someone else, with a warning saying how to
-   merge them if they are not. A report that could be two patients, or names no one, is
-   matched to no one and compared with nothing. `arogya-patients assign` moves a report;
-   a report read again with `--force` stays with the patient it was for.
+   `arogya-patients merge` joins the two, and then that spelling is remembered. Someone
+   else is someone else:
+   - "Sunita K. Patil", when the patient is also printed as "Sunita R. Patil" (a middle
+     initial is a father's or husband's name);
+   - "B/O Sunita Patil", Sunita's baby (and S/O, D/O, W/O);
+   - a same-named patient of the other sex (printed, or from "Mr."/"Mrs."), or born more
+     than a year apart (from a printed age or date of birth);
+
+   each with a warning saying how to merge them if they are the same person. A report
+   that could be two patients, or names no one ("Mrs.", "Patient"), is matched to no one
+   and compared with nothing. `arogya-patients assign` moves a report; a report read
+   again with `--force` stays with the patient it was for. Two reports read at once can't
+   both add the same new patient.
 
 ## Configuration
 
 | What | Where |
 |---|---|
 | The tests read, the names labs print for them, look-alike tests to reject, standard units, conversions, believable limits, variation constants with their sources, cross-test checks | `arogya_vahi/data/lab_tests.toml` |
+| How labs print a person: titles, sex words, relation markers (B/O), placeholder names, age units | `arogya_vahi/data/people.toml` |
 | The summary's Marathi sentences and doctor questions | `arogya_vahi/data/summary_mr.toml` |
 | The instructions sent to Gemma | `arogya_vahi/prompts/` |
 | Model, Ollama host and options, page-reading and verification thresholds, storage folder | `arogya_vahi/config.py` |
@@ -178,7 +186,7 @@ Linux, and installs the built wheel in a clean environment to check that it runs
 | `verify.py` | Each result checked against the PDF, its believable limits and the report's other results |
 | `change.py` | Real change or normal variation, by the Reference Change Value |
 | `summary.py` | The Marathi summary and doctor questions (the `arogya-summary` command) |
-| `patients.py` | Which family member a report is for (the `arogya-patients` command) |
+| `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |

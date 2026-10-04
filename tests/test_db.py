@@ -6,11 +6,11 @@ import typing
 from contextlib import closing
 
 import pytest
-from factories import report_record, rows, saved_result
+from factories import report_record, rows, saved_report, saved_result
 
 from arogya_vahi import db
 from arogya_vahi.config import settings
-from arogya_vahi.models import Source, Status
+from arogya_vahi.models import Patient, Sex, Source, Status
 
 
 def test_connect_creates_tables_and_records_the_schema_version(conn):
@@ -76,7 +76,7 @@ def test_the_database_enforces_its_own_constraints(conn, overrides):
         db.save_report(conn, report_record(construct=True, **overrides), [])
 
 
-@pytest.mark.parametrize("name, literal", [("status", Status), ("source", Source)])
+@pytest.mark.parametrize("name, literal", [("status", Status), ("source", Source), ("sex", Sex)])
 def test_schema_checks_match_the_models(name, literal):
     allowed = re.search(rf"CHECK \({name} IN \(([^)]*)\)\)", db.SCHEMA)[1]
     assert set(re.findall(r"'(\w+)'", allowed)) == set(typing.get_args(literal))
@@ -181,3 +181,42 @@ def test_timeline_points_of_one_patient(conn):
     db.save_report(conn, report_record(sample_date="2026-01-15"), [saved_result()])
     assert db.timeline_points(conn, patient_id=1) == []
     assert len(db.timeline_points(conn)) == 1
+
+
+# ---------------------------------------------------------------- patients
+
+
+def test_patients_are_added_read_updated_and_deleted_when_unused(conn):
+    sunita = db.add_patient(conn, Patient(id=0, display_name="Sunita Patil", sex="F"))
+    assert db.patient(conn, sunita.id) == sunita and db.patients(conn) == [sunita]
+    db.update_patient(conn, sunita.model_copy(update={"aliases": ["SUNITA R PATIL"], "birth_year": 1964}))
+    assert db.patient(conn, sunita.id).aliases == ["SUNITA R PATIL"]
+    report_id = saved_report(conn, patient_id=sunita.id)
+    assert not db.delete_patient_if_unused(conn, sunita.id)  # a report is still hers
+    db.set_report_patient(conn, report_id, None)
+    assert db.delete_patient_if_unused(conn, sunita.id) and db.patient(conn, sunita.id) is None
+
+
+def test_report_people_to_match_are_named_and_unmatched(conn):
+    ramesh = db.add_patient(conn, Patient(id=0, display_name="Ramesh Patil"))
+    saved_report(conn, "a", sample_date="2026-04-15")
+    saved_report(conn, "b", sample_date="2026-01-15", patient_name_raw=None)
+    saved_report(conn, "c", sample_date="2026-02-15", patient_id=ramesh.id)
+    assert [person.report_id for person in db.report_people(conn)] == [2, 3, 1]  # oldest sample first
+    assert [person.report_id for person in db.report_people(conn, to_match=True)] == [1]
+    assert db.report_person(conn, 3).patient_id == ramesh.id and db.report_person(conn, 9) is None
+
+
+def test_a_patients_sex_is_checked_by_the_database(conn):
+    with pytest.raises(sqlite3.IntegrityError):
+        db.add_patient(
+            conn, Patient.model_construct(id=0, display_name="X", aliases=[], sex="X", birth_year=None)
+        )
+
+
+def test_write_holds_the_lock_and_rolls_back_on_error(conn):
+    with pytest.raises(RuntimeError), db.write(conn):
+        db.add_patient(conn, Patient(id=0, display_name="Sunita Patil"))
+        assert conn.in_transaction
+        raise RuntimeError
+    assert db.patients(conn) == []

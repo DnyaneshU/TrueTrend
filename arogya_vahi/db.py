@@ -1,4 +1,4 @@
-"""SQLite storage for reports and their results.
+"""SQLite storage for reports, their results and the patients they are for.
 
 The database and the stored original PDFs live in settings.storage_dir: real reports
 and patient data never go into the repo. All SQL is in this module.
@@ -6,7 +6,8 @@ and patient data never go into the repo. All SQL is in this module.
 
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 
 from arogya_vahi.config import settings
@@ -44,6 +45,12 @@ _INSERT_RESULT = (
 )
 _UPDATE_RESULT = f"UPDATE results SET {', '.join(f'{column} = ?' for column in RESULT_COLUMNS)} WHERE id = ?"
 _SELECT_PRINTED = f"SELECT id, {', '.join(PRINTED_COLUMNS)} FROM results WHERE report_id = ? ORDER BY id"
+_SELECT_PATIENT = "SELECT id, display_name, aliases_json, sex, birth_year FROM patients"
+_SELECT_PERSON = (
+    "SELECT id AS report_id, patient_id, patient_name_raw AS name, patient_age_raw AS age, "
+    "patient_sex_raw AS sex, sample_date, report_date, lab_name FROM reports"
+)
+_PEOPLE_ORDER = "ORDER BY COALESCE(sample_date, report_date), id"
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
@@ -110,70 +117,93 @@ def update_result(conn: sqlite3.Connection, result_id: int, result: SavedResult)
 def timeline_points(conn: sqlite3.Connection, patient_id: int | None = None) -> list[TimelinePoint]:
     """Every saved result that isn't rejected and whose report has a sample date, oldest first.
 
-    patient_id narrows it to one person; None means every report.
+    patient_id narrows it to one person; None means every report. A matched report's person
+    is named as their patient is; an unmatched one as printed.
     """
     rows = conn.execute(
-        "SELECT results.id AS result_id, report_id, patient_id, patient_name_raw AS patient_name, test_code, "
-        "sample_date, lab_name, raw_value_text AS value_text, value, unit, qualifier, value_std, unit_std, "
-        "ref_text, ref_low, ref_high, ref_verified, status, page, file_path "
+        "SELECT results.id AS result_id, report_id, reports.patient_id, "
+        "COALESCE(patients.display_name, patient_name_raw) AS patient_name, test_code, sample_date, "
+        "lab_name, raw_value_text AS value_text, value, unit, qualifier, value_std, unit_std, ref_text, "
+        "ref_low, ref_high, ref_verified, status, page, file_path "
         "FROM results JOIN reports ON reports.id = results.report_id "
-        "WHERE sample_date IS NOT NULL AND status != 'rejected' "
-        "AND (:patient IS NULL OR patient_id = :patient) "
+        "LEFT JOIN patients ON patients.id = reports.patient_id "
+        "WHERE sample_date IS NOT NULL AND test_code IS NOT NULL AND status != 'rejected' "
+        "AND (:patient IS NULL OR reports.patient_id = :patient) "
         "ORDER BY sample_date, report_id, results.id",
         {"patient": patient_id},
     )
     return [TimelinePoint(**row) for row in rows]
 
 
+@contextmanager
+def write(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """One transaction that holds the write lock from its first read, so what it reads (say,
+    the patients a new report could be) can't change before it writes. Inside one already
+    begun, it is part of that one."""
+    if conn.in_transaction:
+        yield conn
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield conn
+    except BaseException:
+        conn.rollback()
+        raise
+    conn.commit()
+
+
 def patients(conn: sqlite3.Connection) -> list[Patient]:
     """Every patient, in the order they were added."""
-    rows = conn.execute("SELECT id, display_name, aliases_json, sex, birth_year FROM patients ORDER BY id")
-    return [
-        Patient(
-            id=row["id"],
-            display_name=row["display_name"],
-            aliases=json.loads(row["aliases_json"]),
-            sex=row["sex"],
-            birth_year=row["birth_year"],
-        )
-        for row in rows
-    ]
+    return [_patient(row) for row in conn.execute(f"{_SELECT_PATIENT} ORDER BY id")]
 
 
-def add_patient(conn: sqlite3.Connection, patient: Patient) -> int:
-    """Insert a patient (its id is ignored) and return the new id."""
-    return conn.execute(
+def patient(conn: sqlite3.Connection, patient_id: int) -> Patient | None:
+    row = conn.execute(f"{_SELECT_PATIENT} WHERE id = ?", (patient_id,)).fetchone()
+    return _patient(row) if row else None
+
+
+def add_patient(conn: sqlite3.Connection, patient: Patient) -> Patient:
+    """Insert a patient (its id is ignored) and return it with its new id."""
+    patient_id = conn.execute(
         "INSERT INTO patients (display_name, aliases_json, sex, birth_year) VALUES (?, ?, ?, ?)",
         _patient_row(patient),
     ).lastrowid
+    return patient.model_copy(update={"id": patient_id})
 
 
 def update_patient(conn: sqlite3.Connection, patient: Patient) -> None:
+    """Save a patient's names, sex and birth year."""
     conn.execute(
         "UPDATE patients SET display_name = ?, aliases_json = ?, sex = ?, birth_year = ? WHERE id = ?",
         [*_patient_row(patient), patient.id],
     )
 
 
-def delete_patient(conn: sqlite3.Connection, patient_id: int) -> None:
-    """Delete a patient who has no reports left (a report pointing to it makes this fail)."""
-    conn.execute("DELETE FROM patients WHERE id = ?", (patient_id,))
-
-
-def report_people(conn: sqlite3.Connection, unmatched: bool = False) -> list[ReportPerson]:
-    """Who each saved report is for, as printed, oldest sample first; unmatched=True: only reports
-    not matched to anyone yet."""
-    rows = conn.execute(
-        "SELECT id AS report_id, patient_id, patient_name_raw AS name, patient_age_raw AS age, "
-        "patient_sex_raw AS sex, sample_date, report_date, lab_name FROM reports "
-        "WHERE NOT :unmatched OR patient_id IS NULL "
-        "ORDER BY COALESCE(sample_date, report_date), id",
-        {"unmatched": unmatched},
+def delete_patient_if_unused(conn: sqlite3.Connection, patient_id: int) -> bool:
+    """Delete a patient no report is for any more; True if they were deleted."""
+    deleted = conn.execute(
+        "DELETE FROM patients WHERE id = :id AND NOT EXISTS (SELECT 1 FROM reports WHERE patient_id = :id)",
+        {"id": patient_id},
     )
-    return [ReportPerson(**row) for row in rows]
+    return deleted.rowcount > 0
+
+
+def report_people(conn: sqlite3.Connection, *, to_match: bool = False) -> list[ReportPerson]:
+    """Who each saved report is for, as printed, oldest sample first.
+
+    to_match=True: only reports that print a name and are not matched to anyone yet.
+    """
+    where = "WHERE patient_id IS NULL AND patient_name_raw IS NOT NULL" if to_match else ""
+    return [ReportPerson(**row) for row in conn.execute(f"{_SELECT_PERSON} {where} {_PEOPLE_ORDER}")]
+
+
+def report_person(conn: sqlite3.Connection, report_id: int) -> ReportPerson | None:
+    row = conn.execute(f"{_SELECT_PERSON} WHERE id = ?", (report_id,)).fetchone()
+    return ReportPerson(**row) if row else None
 
 
 def set_report_patient(conn: sqlite3.Connection, report_id: int, patient_id: int | None) -> None:
+    """Record who a report is for."""
     conn.execute("UPDATE reports SET patient_id = ? WHERE id = ?", (patient_id, report_id))
 
 
@@ -210,6 +240,16 @@ def _result_row(result: SavedResult) -> list:
         "notes": "; ".join(result.notes) or None,
     }
     return [row[_FIELD_OF_COLUMN.get(column, column)] for column in RESULT_COLUMNS]
+
+
+def _patient(row: sqlite3.Row) -> Patient:
+    return Patient(
+        id=row["id"],
+        display_name=row["display_name"],
+        aliases=json.loads(row["aliases_json"]),
+        sex=row["sex"],
+        birth_year=row["birth_year"],
+    )
 
 
 def _patient_row(patient: Patient) -> list:

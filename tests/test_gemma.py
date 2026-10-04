@@ -1,4 +1,6 @@
+import os
 import typing
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -6,7 +8,7 @@ import ollama
 import pytest
 from pydantic import ValidationError
 
-from arogya_vahi import gemma, lab_tests
+from arogya_vahi import config, gemma, lab_tests
 from arogya_vahi.config import Settings
 from arogya_vahi.errors import UserError
 from arogya_vahi.gemma import _client as _real_client
@@ -174,3 +176,16 @@ def test_a_remote_ollama_must_be_allowed_explicitly(host):
 
 def test_a_host_without_a_scheme_is_http():
     assert Settings(ollama_host="localhost:11434", _env_file=None).ollama_host == "http://localhost:11434"
+
+
+def test_an_invalid_setting_is_one_line_not_a_traceback(monkeypatch):
+    monkeypatch.setenv("AROGYA_NUM_CTX", "lots")
+    message = "error: invalid setting: AROGYA_NUM_CTX: Input should be a valid integer"
+    with pytest.raises(SystemExit, match=message):
+        config._load()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows paths")
+def test_long_paths_work_on_windows_including_network_shares():
+    assert str(config._long_path(Path("C:/x/originals"))) == r"\\?\C:\x\originals"
+    assert str(config._long_path(Path("//server/share/originals"))) == r"\\?\UNC\server\share\originals"

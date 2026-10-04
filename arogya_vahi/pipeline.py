@@ -6,7 +6,6 @@ is checked against the PDF afterwards, by arogya_vahi.verify.
 """
 
 import logging
-import re
 import time
 from collections.abc import Callable
 
@@ -16,6 +15,7 @@ from arogya_vahi.dates import parse_date
 from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.models import Extraction, Header, PageExtraction, PageInput, PageReply, PageSummary, Result
+from arogya_vahi.people import age_of, same_person_name
 from arogya_vahi.text import clean_text, plural, same_name, split_flag
 
 logger = logging.getLogger(__name__)
@@ -168,6 +168,8 @@ def _same(field_name: str, a: str, b: str) -> bool:
     """The same day however it is written; the same age in years; otherwise the same name."""
     if field_name in DATE_FIELDS and (day := parse_date(a)) is not None:
         return day == parse_date(b)
-    if field_name == "age" and (years := re.findall(r"\d+", a)):
-        return years[:1] == re.findall(r"\d+", b)[:1]
+    if field_name == "age" and (years := age_of(a)) is not None:
+        return years == age_of(b)
+    if field_name == "patient_name":
+        return same_person_name(a, b)
     return same_name(a, b)
