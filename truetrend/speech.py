@@ -67,9 +67,12 @@ def say(text: str) -> bytes:
     """`text` spoken in Marathi, as a WAV file."""
     if not text.strip():
         raise UserError("There is nothing to say.")
-    from piper import SynthesisConfig  # beside PiperVoice; imported with it
+    # _voice() first: it turns a missing piper or a missing model into one sentence a
+    # person can act on. Importing anything from piper out here would raise a traceback
+    # ahead of it, on the very machines that have not installed it.
+    voice = _voice()
+    from piper import SynthesisConfig  # safe now: _voice() imported piper itself
 
-    voice = _voice()  # before opening the file: a missing voice is not a half-written WAV
     audio = io.BytesIO()
     with wave.open(audio, "wb") as out:
         voice.synthesize_wav(

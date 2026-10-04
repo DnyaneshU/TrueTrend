@@ -34,3 +34,21 @@ def test_the_voice_is_downloaded_from_one_place_that_is_named_in_the_code():
     # Every file the app fetches should be traceable to a source, like the CVi constants.
     assert speech.VOICE_URL.startswith("https://huggingface.co/rhasspy/piper-voices/")
     assert (f"{speech.VOICE}.onnx", f"{speech.VOICE}.onnx.json") == speech.VOICE_FILES
+
+
+def test_without_piper_installed_it_says_how_to_install_it(storage, monkeypatch):
+    # The voice is an optional extra, so most machines will not have piper. They should
+    # get one sentence they can act on, not a ModuleNotFoundError traceback.
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_piper(name, *args, **kwargs):
+        if name == "piper" or name.startswith("piper."):
+            raise ImportError("No module named 'piper'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_piper)
+    speech._voice.cache_clear()
+    with pytest.raises(UserError, match="pip install piper-tts"):
+        speech.say("काहीतरी")
