@@ -12,8 +12,17 @@ def test_the_voice_is_not_installed_on_a_fresh_machine(storage):
 
 
 def test_asking_it_to_speak_before_it_is_installed_says_how_to_install_it(storage):
+    # Two things can be missing, and each has its own sentence: piper itself (an optional
+    # extra, so a machine running the tests may not have it) and the voice model. Which
+    # one this machine is missing decides which sentence is right.
     speech._voice.cache_clear()
-    with pytest.raises(UserError, match="truetrend-voice install"):
+    try:
+        import piper  # noqa: F401
+
+        expected = "truetrend-voice install"
+    except ImportError:
+        expected = "pip install piper-tts"
+    with pytest.raises(UserError, match=expected):
         speech.say("काहीतरी")
 
 
