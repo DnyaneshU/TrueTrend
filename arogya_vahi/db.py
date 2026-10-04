@@ -232,10 +232,16 @@ def move_reports(conn: sqlite3.Connection, from_patient: int, to_patient: int) -
 
 
 def latest_patient_id(conn: sqlite3.Connection) -> int | None:
-    """The patient of the report with the latest sample date, if it is matched to one."""
+    """Whose reports the app opens on: the most recently tested patient.
+
+    Two people in a family are often tested the same day, so a tie on the sample date
+    goes to whoever has more reports here -- the person this vahi is being kept for --
+    rather than to whichever report happened to be saved last.
+    """
     row = conn.execute(
-        "SELECT patient_id FROM reports WHERE sample_date IS NOT NULL "
-        "ORDER BY sample_date DESC, id DESC LIMIT 1"
+        "SELECT patient_id, max(sample_date) AS tested, count(*) AS reports FROM reports "
+        "WHERE sample_date IS NOT NULL AND patient_id IS NOT NULL "
+        "GROUP BY patient_id ORDER BY tested DESC, reports DESC, patient_id LIMIT 1"
     ).fetchone()
     return row["patient_id"] if row else None
 

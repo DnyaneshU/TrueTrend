@@ -48,9 +48,43 @@ Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck|se
   after updating the app. It also matches reports saved before patient matching existed
   (so do `arogya-summary` and `arogya-patients`).
 
-## The web server
+## The web app
 
-`arogya-serve` runs the API on `http://127.0.0.1:8000`, on this computer only. Sent files
+`arogya-serve` opens the website at `http://127.0.0.1:8000`. It is in Marathi, built for
+a phone held by someone who is not looking for a computer, and it needs no internet: even
+the chart library is served from this computer.
+
+The first person to open it makes an account, and after that the reports are behind it.
+The account is made here and only here -- sign-in is the OAuth 2.0 password grant served
+by this app itself, so no account is made with Google or anyone else and no password
+leaves the laptop. A session lasts a year, so she signs in once on her phone.
+
+**The five screens**, along the bottom of the phone:
+
+| | | |
+|---|---|---|
+| **सारांश** | Summary | What changed in the latest report, in at most three sentences, with a **ऐका** button that reads them aloud, and the questions to ask at the next visit |
+| **जोडा** | Add | Pick a report from the phone, and watch it go रांगेत (queued) to वाचत आहे (reading) to तयार (ready). It shows the WhatsApp -> Save to Files steps for anyone who has not done it before |
+| **बदल** | Changes | One row per test with its latest value; tap it for the chart, the lab's normal range behind it, and every change judged as a real change or normal variation |
+| **तपासा** | Check | Everything waiting for a person: a value the code could not find, two patients who may be one person, the same report sent twice |
+| **माणसं** | People | Which report belongs to whom, and the account |
+
+A first-time reader is shown a short guide -- what the app does, what each of the five
+keys is for, what each colour means, and that it never gives medical advice. It can be
+read again any time from **मदत**.
+
+**Tapping a value shows where it is printed.** Safari ignores a PDF link's `#page=N`, so
+tapping a point on a chart would only ever open page 1 of a 19-page report. Instead the
+server draws that page as a picture with the value ringed on it, so she sees the number
+in its own row, in the lab's own layout.
+
+**On an iPhone**, she saves the report from WhatsApp (share -> Save to Files), opens the
+website, taps **रिपोर्ट जोडा** and picks it. On Android the browser's share sheet can send
+it straight to the app.
+
+## The server and its API
+
+`arogya-serve` runs on `http://127.0.0.1:8000`, on this computer only. Sent files
 wait in a queue, and one background worker reads them with Gemma, one at a time, in the
 order they came (each takes minutes and the whole GPU). The queue is kept in the database,
 so files left half-read by a stop are read again on the next start. A phone reaches the
@@ -64,13 +98,23 @@ lets in only the family's own devices.
 | `POST /share-target` (files) | The same, for a report shared from WhatsApp; returns to the app |
 | `GET /api/summary?patient=N` | The Marathi summary (the latest report's patient by default) |
 | `GET /api/timelines?patient=N` | Every test's results, oldest first, with each change judged |
-| `GET /api/reports/{id}/original` | The original PDF; add `#page=N` to open it at a page |
+| `GET /api/reports/{id}/original` | The original PDF, to save or print |
+| `GET /api/reports/{id}/page/{n}?result=R` | Page `n` as a picture, with result `R`'s value ringed where the report prints it |
 | `GET /api/questions?patient=N` | What waits for a person: values to check, same-named patients, reports that could be two patients, likely duplicates |
 | `POST /api/results/{id}/review` | `{"decision": "verified" \| "rejected"}`: a person compared the value with the original |
 | `GET /api/patients` | Every patient and their reports |
 | `POST /api/patients/merge` | `{"keep": 1, "other": 3}`: two patients are one person |
 | `PUT /api/reports/{id}/patient` | `{"patient_id": 2}`, or `null` for someone new |
 | `DELETE /api/reports/{id}` | Delete a report sent twice (its stored original is kept) |
+| `GET /api/me` | Who this browser is signed in as, and whether an account exists yet |
+| `POST /api/sign-up` | `{"name": ..., "password": ...}`: make an account (the first one is open; after that only a signed-in person adds more) |
+| `POST /api/sign-in` | The OAuth 2.0 password grant; returns a bearer token and sets the session cookie |
+| `POST /api/sign-out` | Sign this device out; the account's other devices stay signed in |
+
+Every request above needs a session once an account exists, as a cookie (what the browser
+keeps) or an `Authorization: Bearer` header (what a script or an iOS Shortcut sends).
+Before the first account is made the app is open, because refusing everything would lock
+the only person who can make one out of her own laptop.
 
 A person's decision on a value outranks the code's: `arogya-recheck` never undoes it.
 `/docs` describes every request.
@@ -169,6 +213,13 @@ but not judged.
   `AROGYA_ALLOW_REMOTE_OLLAMA=true`. The `OLLAMA_HOST` environment variable is ignored.
 - `storage/`, databases, PDFs and report photos are gitignored. Never commit real reports;
   tests use synthetic ones only.
+- Accounts are made on this computer and nowhere else. Signing in contacts no one: there
+  is no Google, no GitHub, no server but this one, and the app works with the internet
+  unplugged. A password is kept only as a PBKDF2-SHA256 hash (600,000 rounds, its own
+  salt) and a session token only as its SHA-256, so neither the database nor a backup of
+  it reveals either one.
+- The website loads nothing from the internet -- no fonts, no analytics, no CDN. Chart.js
+  is served from `arogya_vahi/web/vendor/`.
 
 ## Limitations
 
@@ -205,6 +256,13 @@ Tests run with the default settings and a temporary storage folder, whatever is 
 reproducible. CI (`.github/workflows/ci.yml`) runs the linters and tests on Windows and
 Linux, and installs the built wheel in a clean environment to check that it runs.
 
+`samples/` holds four made-up reports -- three labs, three layouts, one family -- so the
+app can be tried without anyone's real results. `python samples/make_samples.py` builds
+them again. Their values were chosen against the real Reference Change Values so that the
+samples show each verdict the app can give: a rise that beats the threshold, a drift that
+does not, and a comparison that is honestly declined because no between-lab CV is
+published for that test.
+
 | Module | Job |
 |---|---|
 | `pages.py` | PDF to one page input per page (rebuilt text, or an image for scans) |
@@ -215,7 +273,9 @@ Linux, and installs the built wheel in a clean environment to check that it runs
 | `change.py` | Real change or normal variation, by the Reference Change Value |
 | `summary.py` | The Marathi summary and doctor questions (the `arogya-summary` command) |
 | `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
-| `server.py`, `ingest.py`, `jobs.py` | The web server and its API; files people send; the worker that reads them |
+| `server.py`, `web.py`, `ingest.py`, `jobs.py` | The web server and its API; who is signed in; files people send; the worker that reads them |
+| `accounts.py`, `highlight.py` | Accounts and sessions on this computer; a report page drawn with one value ringed |
+| `web/` | The website: `index.html`, `styles.css`, and `app.js` over `api.js` (requests), `mr.js` (Marathi text), `dom.js`, `chart.js`, `guide.js` |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |

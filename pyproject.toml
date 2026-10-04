@@ -58,7 +58,16 @@ arogya-serve = "arogya_vahi.server:main"
 include = ["arogya_vahi*"]
 
 [tool.setuptools.package-data]
-arogya_vahi = ["data/*.toml", "prompts/*.txt", "schema.sql"]
+arogya_vahi = [
+    "data/*.toml",
+    "prompts/*.txt",
+    "schema.sql",
+    "web/*.html",
+    "web/*.css",
+    "web/*.js",
+    "web/*.svg",
+    "web/vendor/*.js",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

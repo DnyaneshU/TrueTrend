@@ -169,3 +169,33 @@ def test_the_website_is_served_without_signing_in_so_the_sign_in_screen_can_load
 def test_the_share_target_needs_a_session_like_everything_else(anyone, report_pdf):
     response = anyone.post("/share-target", files=[("files", ("report.pdf", report_pdf))])
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------- the website's own files
+
+
+@pytest.mark.parametrize(
+    "path, kind",
+    [
+        ("/", "text/html"),
+        ("/styles.css", "text/css"),
+        ("/app.js", "javascript"),
+        ("/icon.svg", "image/svg"),
+        ("/vendor/chart.umd.min.js", "javascript"),
+    ],
+)
+def test_every_file_the_page_asks_for_is_served(client, path, kind):
+    response = client.get(path)
+    assert response.status_code == 200 and kind in response.headers["content-type"]
+
+
+def test_the_website_loads_nothing_from_the_internet(client):
+    # The promise is that reports never leave the laptop; a page that fetches a font or a
+    # chart library from a CDN would tell that CDN when she opens her own health record.
+    page = client.get("/").text
+    assert "//" not in page.replace("http://www.w3.org", "").replace("<!--", "").replace("-->", "")
+
+
+def test_the_app_is_one_module_per_job(client):
+    for module in ("api.js", "mr.js", "dom.js", "chart.js", "guide.js"):
+        assert client.get(f"/{module}").status_code == 200
