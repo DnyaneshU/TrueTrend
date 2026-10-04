@@ -220,3 +220,27 @@ def test_write_holds_the_lock_and_rolls_back_on_error(conn):
         assert conn.in_transaction
         raise RuntimeError
     assert db.patients(conn) == []
+
+
+def test_the_app_opens_on_the_person_whose_history_it_is(conn):
+    # Two people are tested on the same day, which happens in a family. The app should
+    # open on the one it has a history for, not on whoever's report was saved last.
+    sunita = db.add_patient(conn, Patient(id=0, display_name="Sunita Patil"))
+    anil = db.add_patient(conn, Patient(id=0, display_name="Anil Patil"))
+    saved_report(conn, "a", sample_date="2026-01-12", patient_id=sunita.id)
+    saved_report(conn, "b", sample_date="2026-05-20", patient_id=sunita.id)
+    saved_report(conn, "c", sample_date="2026-09-28", patient_id=sunita.id)
+    saved_report(conn, "d", sample_date="2026-09-28", patient_id=anil.id)  # saved later
+    assert db.latest_patient_id(conn) == sunita.id
+
+
+def test_whoever_was_tested_most_recently_wins_when_no_one_has_a_longer_history(conn):
+    sunita = db.add_patient(conn, Patient(id=0, display_name="Sunita Patil"))
+    anil = db.add_patient(conn, Patient(id=0, display_name="Anil Patil"))
+    saved_report(conn, "a", sample_date="2026-01-12", patient_id=sunita.id)
+    saved_report(conn, "b", sample_date="2026-09-28", patient_id=anil.id)
+    assert db.latest_patient_id(conn) == anil.id
+
+
+def test_with_nothing_saved_no_one_is_the_latest(conn):
+    assert db.latest_patient_id(conn) is None

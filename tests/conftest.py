@@ -129,3 +129,20 @@ def make_scan_pdf(make_pdf, tmp_path):
         return path
 
     return _make
+
+
+@pytest.fixture
+def client():
+    """The API with no background worker: a test reads the queue itself."""
+    from fastapi.testclient import TestClient
+
+    from arogya_vahi.server import create_app
+
+    with TestClient(create_app()) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def report_pdf(make_pdf, report_page):
+    """One synthetic report as the bytes a phone would send."""
+    return make_pdf([report_page]).read_bytes()

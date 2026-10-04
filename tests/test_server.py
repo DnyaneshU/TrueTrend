@@ -14,20 +14,9 @@ from arogya_vahi.extract import run
 from arogya_vahi.server import create_app
 
 
-@pytest.fixture
-def client():
-    with TestClient(create_app()) as test_client:
-        yield test_client
-
-
 def send(client, *files):
     """POST files given as (name, bytes)."""
     return client.post("/api/uploads", files=[("files", (name, data)) for name, data in files])
-
-
-@pytest.fixture
-def report_pdf(make_pdf, report_page):
-    return make_pdf([report_page]).read_bytes()
 
 
 def photo_of(pdf: bytes) -> bytes:

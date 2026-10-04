@@ -12,9 +12,9 @@ storage/
 *.png
 *.heic
 *.webp
-# ...except synthetic sample reports and the web app's icons, once they exist
+# ...except synthetic sample reports and the web app's own pictures
 !samples/**
-!web/icons/**
+!arogya_vahi/web/**
 
 # Python and tooling
 __pycache__/

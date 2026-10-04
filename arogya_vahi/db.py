@@ -12,6 +12,7 @@ from pathlib import Path
 
 from arogya_vahi.config import settings
 from arogya_vahi.models import (
+    Account,
     Patient,
     ReportPerson,
     ReportRecord,
@@ -28,7 +29,7 @@ from arogya_vahi.text import split_flag
 
 SCHEMA = read_text("schema.sql")
 # Bumped when an older database needs migrating: see _migrate.
-SCHEMA_VERSION = 3  # 2: reports are indexed by patient; 3: uploads, and results a person reviewed
+SCHEMA_VERSION = 4  # 2: reports indexed by patient; 3: uploads and reviewed results; 4: accounts
 # Columns added after the first databases were made: CREATE TABLE IF NOT EXISTS leaves
 # an older table as it was, so _migrate adds them.
 ADDED_COLUMNS = (
@@ -231,10 +232,16 @@ def move_reports(conn: sqlite3.Connection, from_patient: int, to_patient: int) -
 
 
 def latest_patient_id(conn: sqlite3.Connection) -> int | None:
-    """The patient of the report with the latest sample date, if it is matched to one."""
+    """Whose reports the app opens on: the most recently tested patient.
+
+    Two people in a family are often tested the same day, so a tie on the sample date
+    goes to whoever has more reports here -- the person this vahi is being kept for --
+    rather than to whichever report happened to be saved last.
+    """
     row = conn.execute(
-        "SELECT patient_id FROM reports WHERE sample_date IS NOT NULL "
-        "ORDER BY sample_date DESC, id DESC LIMIT 1"
+        "SELECT patient_id, max(sample_date) AS tested, count(*) AS reports FROM reports "
+        "WHERE sample_date IS NOT NULL AND patient_id IS NOT NULL "
+        "GROUP BY patient_id ORDER BY tested DESC, reports DESC, patient_id LIMIT 1"
     ).fetchone()
     return row["patient_id"] if row else None
 
@@ -368,6 +375,68 @@ def resolve_stored_path(file_path: str) -> Path:
     """The stored original a reports.file_path names (absolute paths are from older versions)."""
     path = Path(file_path)
     return path if path.is_absolute() else settings.originals_dir / path.name
+
+
+def result_bbox(conn: sqlite3.Connection, result_id: int, report_id: int) -> tuple | None:
+    """Where this result's value is printed, if it is this report's and its box was saved."""
+    row = conn.execute(
+        "SELECT bbox_json FROM results WHERE id = ? AND report_id = ?", (result_id, report_id)
+    ).fetchone()
+    return tuple(json.loads(row["bbox_json"])) if row and row["bbox_json"] else None
+
+
+# --- Accounts and the sessions that keep a device signed in (arogya_vahi.accounts).
+
+
+def _folded(name: str) -> str:
+    """What an account name is matched on: case and inner spacing don't distinguish two people."""
+    return " ".join(name.split()).casefold()
+
+
+def add_account(conn: sqlite3.Connection, name: str, password_hash: str) -> Account:
+    """Save a new account. The caller checks the name is free inside the same write."""
+    cursor = conn.execute(
+        "INSERT INTO accounts (name, name_folded, password_hash) VALUES (?, ?, ?)",
+        (name, _folded(name), password_hash),
+    )
+    return Account(id=int(cursor.lastrowid or 0), name=name, password_hash=password_hash)
+
+
+def account_named(conn: sqlite3.Connection, name: str) -> Account | None:
+    """The account with this name, however it was typed."""
+    row = conn.execute(
+        "SELECT id, name, password_hash FROM accounts WHERE name_folded = ?", (_folded(name),)
+    ).fetchone()
+    return Account(**row) if row else None
+
+
+def account_count(conn: sqlite3.Connection) -> int:
+    """How many accounts exist: none means the app asks the first person to make one."""
+    return conn.execute("SELECT count(*) FROM accounts").fetchone()[0]
+
+
+def add_session(conn: sqlite3.Connection, account_id: int, token_hash: str, days: int) -> None:
+    """Remember a signed-in device until `days` from now."""
+    conn.execute(
+        "INSERT INTO sessions (token_hash, account_id, expires_at) "
+        f"VALUES (?, ?, datetime('now', '+{int(days)} days'))",
+        (token_hash, account_id),
+    )
+
+
+def account_of_session(conn: sqlite3.Connection, token_hash: str) -> Account | None:
+    """Whose session this is, or None when it is unknown, signed out or expired."""
+    row = conn.execute(
+        "SELECT a.id, a.name, a.password_hash FROM sessions s JOIN accounts a ON a.id = s.account_id "
+        "WHERE s.token_hash = ? AND s.expires_at > datetime('now')",
+        (token_hash,),
+    ).fetchone()
+    return Account(**row) if row else None
+
+
+def delete_session(conn: sqlite3.Connection, token_hash: str) -> None:
+    """Sign one device out; the account's other devices stay signed in."""
+    conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
 
 
 def _result_row(result: SavedResult) -> list:

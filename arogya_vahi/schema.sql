@@ -64,7 +64,26 @@ CREATE TABLE IF NOT EXISTS uploads (
     updated_at  TEXT
 );
 
+-- Who may open the app. Accounts are made on this computer only: no account is made with
+-- anyone else, and a password is kept only as a PBKDF2 hash with its own salt.
+CREATE TABLE IF NOT EXISTS accounts (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL,
+    name_folded    TEXT NOT NULL UNIQUE,         -- the name matched on, case- and space-insensitive
+    password_hash  TEXT NOT NULL,                -- pbkdf2_sha256$rounds$salt$hash
+    created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- A signed-in device. The token itself is never stored, only its SHA-256.
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash  TEXT PRIMARY KEY,
+    account_id  INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    expires_at  TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_report ON results(report_id);
 CREATE INDEX IF NOT EXISTS idx_results_test ON results(test_code);
 CREATE INDEX IF NOT EXISTS idx_reports_patient ON reports(patient_id);
 CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id);
