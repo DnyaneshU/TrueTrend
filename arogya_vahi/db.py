@@ -77,7 +77,11 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     """
     path = Path(path or settings.db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=settings.db_timeout)
+    # check_same_thread=False: the server answers each request on whichever worker
+    # thread is free, so the thread that uses a connection is not the one that opened
+    # it. Each request still gets its own connection, and every write goes through
+    # write(), which holds SQLite's own lock -- so nothing is shared between threads.
+    conn = sqlite3.connect(path, timeout=settings.db_timeout, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     if _version(conn) < SCHEMA_VERSION:

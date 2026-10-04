@@ -112,6 +112,12 @@ export const T = {
   voiceOnPhone:
     "Windows ships no Marathi voice. On a phone, which has one, it is read properly.",
 
+  // asking a question
+  thinking: "Reading your question…",
+  fromReports: "From:",
+  couldAsk: "You could ask about:",
+  noReportsYet: "No reports yet",
+
   // things said about the data
   reportsSuffix: (n) => `${n} report${n === 1 ? "" : "s"}`,
   page: (n) => `page ${n}`,

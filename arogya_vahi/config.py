@@ -66,6 +66,11 @@ class Settings(BaseSettings):
         return _long_path(self.storage_dir / "originals")
 
     @property
+    def voices_dir(self) -> Path:
+        """The Marathi text-to-speech voice, downloaded once (arogya_vahi.speech)."""
+        return self.storage_dir / "voices"
+
+    @property
     def inbox_dir(self) -> Path:
         """Sent files waiting to be read, as PDFs named <sha256>.pdf."""
         return _long_path(self.storage_dir / "inbox")

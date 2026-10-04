@@ -244,3 +244,14 @@ def test_whoever_was_tested_most_recently_wins_when_no_one_has_a_longer_history(
 
 def test_with_nothing_saved_no_one_is_the_latest(conn):
     assert db.latest_patient_id(conn) is None
+
+
+def test_a_connection_can_be_used_by_the_thread_that_takes_the_next_request(conn):
+    # The server answers each request on whichever worker thread is free, so a connection
+    # opened for a request is used by a different thread than the one that opened it.
+    # SQLite refuses that by default, and the whole app answered "can't reach the laptop".
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as elsewhere:
+        count = elsewhere.submit(lambda: conn.execute("SELECT count(*) FROM reports").fetchone()[0])
+        assert count.result() == 0

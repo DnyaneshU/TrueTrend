@@ -17,7 +17,7 @@ import { $, button, el, empty, fill, icon, note, show, tag, whileWorking } from 
 import { drawTimeline } from "./chart.js";
 import { guideSeen, openGuide } from "./guide.js";
 
-const SECTIONS = ["home", "add", "trend", "ask", "people"];
+const SECTIONS = ["home", "add", "trend", "question", "ask", "people"];
 const POLL_MS = 2500; // how often the add screen asks whether a report has been read
 
 const state = {
@@ -27,6 +27,9 @@ const state = {
   chart: null,
   polling: null,
   saidAboutVoice: false, // the stand-in voice is explained once, not on every press
+  canSpeakMarathi: false, // this computer has the Piper voice installed
+  patients: [], // the family, for the switcher in the header
+  patient: null, // whose reports are on screen; null means "the most recently tested"
 };
 
 // ---------------------------------------------------------------- loading
@@ -49,7 +52,7 @@ const findingLine = (sentence, kind) =>
 
 async function drawHome() {
   await load($("findings"), async () => {
-    const summary = (state.summary = await api.summary());
+    const summary = (state.summary = await api.summary(state.patient));
     const sentences = summary.sentences ?? [];
 
     $("home-date").textContent = summary.latest_sample_date
@@ -106,10 +109,33 @@ function setSpeaking(on) {
   $("speak").classList.toggle("btn--primary", on);
 }
 
+/** The audio element used when this computer speaks Marathi for itself. */
+let player = null;
+
+function stopSpeaking() {
+  voice.stop();
+  if (player) {
+    player.pause();
+    player = null;
+  }
+  setSpeaking(false);
+}
+
 async function onSpeak() {
-  if (voice.speaking()) {
-    voice.stop();
-    return setSpeaking(false);
+  if (voice.speaking() || player) return stopSpeaking();
+
+  // This computer may have a real Marathi voice of its own (arogya-voice install).
+  // Prefer it: a browser can only use what the system has, and Windows has none.
+  if (state.canSpeakMarathi) {
+    setSpeaking(true);
+    player = new Audio(api.summaryAudio(state.patient));
+    player.onended = player.onerror = stopSpeaking;
+    try {
+      await player.play();
+      return;
+    } catch {
+      player = null; // autoplay refused, or the voice failed: fall through to the browser
+    }
   }
 
   // What is spoken is the Marathi the server wrote, unchanged: this is the one place
@@ -120,7 +146,7 @@ async function onSpeak() {
   if (!lines.length) return;
 
   setSpeaking(true); // the voice list may take a moment; show that the press landed
-  const spoke = await voice.speak(lines, () => setSpeaking(false));
+  const spoke = await voice.speak(lines, stopSpeaking);
 
   if (!spoke) {
     setSpeaking(false);
@@ -226,7 +252,7 @@ function testRow(timeline, onOpen) {
 
 async function drawTrends() {
   await load($("tests"), async () => {
-    const timelines = await api.timelines();
+    const timelines = await api.timelines(state.patient);
     $("trend-count").textContent = timelines.length
       ? `${timelines.length} test${timelines.length === 1 ? "" : "s"}`
       : "";
@@ -301,6 +327,74 @@ function showPrintedPage(point) {
       ),
       picture,
     ),
+  );
+}
+
+// ---------------------------------------------------------------- asking a question
+
+/** Questions she can tap instead of typing. In Marathi, because she asks in Marathi. */
+const EXAMPLES = [
+  "माझी साखर वाढली आहे का?",
+  "कोलेस्टेरॉल नॉर्मल आहे का?",
+  "शेवटची तपासणी कधी झाली?",
+  "हिमोग्लोबिन किती आहे?",
+];
+
+/** Where every number in an answer came from: the proof, printed under it. */
+function sources(points) {
+  if (!points.length) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const span =
+    points.length > 1 ? `${t.day(first.sample_date)} – ${t.day(last.sample_date)}` : t.day(last.sample_date);
+  return el(
+    "p.sources",
+    el("b", t.T.fromReports),
+    ` ${span} · ${t.T.reportsSuffix(points.length)}`,
+    last.lab_name ? ` · ${last.lab_name}` : "",
+  );
+}
+
+async function askQuestion(question) {
+  if (!question.trim()) return;
+  $("question-input").value = question;
+  fill($("answer"), el("div.answer", el("p.muted", t.T.thinking)));
+
+  try {
+    const said = await api.ask(question, state.patient);
+    fill(
+      $("answer"),
+      el(
+        `div.answer${said.understood ? "" : ".answer--lost"}`,
+        // The sentences are Marathi built by the server from saved values; the page
+        // shows them as they came and adds nothing of its own.
+        ...said.sentences.map((line) => el("p", { lang: "mr" }, line)),
+        said.understood && sources(said.points),
+        said.suggestions?.length &&
+          el(
+            "p.sources",
+            el("b", t.T.couldAsk),
+            " ",
+            said.suggestions.join(", "),
+          ),
+      ),
+    );
+  } catch (error) {
+    if (error.status === 401) return gate();
+    fill($("answer"), note(error.message, "bad"));
+  }
+}
+
+function drawExamples() {
+  fill(
+    $("question-examples"),
+    EXAMPLES.map((question) => {
+      const chip = el("button.chip", question);
+      chip.type = "button";
+      chip.lang = "mr";
+      chip.addEventListener("click", () => askQuestion(question));
+      return chip;
+    }),
   );
 }
 
@@ -391,7 +485,7 @@ function duplicate([earlier, later], refresh) {
 
 async function drawAsk() {
   await load($("ask-list"), async () => {
-    const questions = (state.questions = await api.questions());
+    const questions = (state.questions = await api.questions(state.patient));
     const items = [
       ...questions.results_to_check.map((item) => valueToCheck(item, drawAsk)),
       ...questions.same_person.map((pair) => samePerson(pair, drawAsk)),
@@ -518,7 +612,14 @@ function go(name) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 
   // Each section reloads as she arrives, so a report read meanwhile shows at once.
-  ({ home: drawHome, add: drawQueue, trend: drawTrends, ask: drawAsk, people: drawPeople })[name]?.();
+  ({
+    home: drawHome,
+    add: drawQueue,
+    trend: drawTrends,
+    question: () => $("question-input").focus(),
+    ask: drawAsk,
+    people: drawPeople,
+  })[name]?.();
 }
 
 // ---------------------------------------------------------------- signing in
@@ -561,32 +662,87 @@ async function gate() {
 async function start(who) {
   show($("gate"), false);
   show($("app"), true);
-  $("session-account").textContent = who.account?.name ?? "";
-  $("who").textContent = who.account?.name ?? "";
 
+  const name = who.account?.name ?? "";
+  $("account-name").textContent = name;
+  $("account-initial").textContent = name.slice(0, 1) || "·";
+
+  drawExamples();
+  api.voice().then((v) => (state.canSpeakMarathi = v.installed)).catch(() => {});
   go("home");
   drawAsk();
   // A report left half-read when the laptop was closed is still being read now.
   drawQueue().then((busy) => busy && startPolling());
-  namePatient();
+  drawSwitcher();
 
   if (!guideSeen()) openGuide();
 }
 
-/** Whose reports the session is showing, named in the bar so it is never a guess.
+/** The family, and which of them the screens are about.
  *
- * The summary and the timelines are for one patient -- the one most recently tested --
- * and which that is matters when a family shares the laptop. The timelines carry the
- * patient's name on every point, so it comes from the same place the numbers do.
+ * Which patient matters when a laptop is shared, so the header says it rather than
+ * leaving her to work it out. With one person there is nothing to switch between, so
+ * the control says the name and stops being a menu.
  */
-async function namePatient() {
+async function drawSwitcher() {
   try {
-    const [timeline] = await api.timelines();
-    const name = timeline?.points?.[0]?.patient_name;
-    $("session-patient").textContent = name || "No reports yet";
+    const listing = await api.patients();
+    state.patients = listing.patients;
   } catch {
-    $("session-patient").textContent = "";
+    state.patients = [];
   }
+
+  const names = state.patients;
+  show($("switcher"), true);
+  $("switcher").classList.toggle("switcher--alone", names.length < 2);
+
+  const current = names.find((p) => p.id === state.patient) ?? names[0];
+  $("patient-name").textContent = current?.display_name ?? t.T.noReportsYet;
+
+  fill(
+    $("patient-menu"),
+    names.map((person) => {
+      const item = el("li");
+      const choice = el(
+        "button.menu-item",
+        person.display_name,
+        el("small", t.T.reportsSuffix(person.reports.length)),
+      );
+      choice.type = "button";
+      choice.setAttribute("role", "option");
+      choice.setAttribute("aria-selected", String(person.id === current?.id));
+      choice.addEventListener("click", () => {
+        state.patient = person.id;
+        closeMenus();
+        go(state.section); // the screens are all about one person: redraw this one
+        drawSwitcher();
+      });
+      item.append(choice);
+      return item;
+    }),
+  );
+}
+
+/** Close whichever dropdown is open. */
+function closeMenus() {
+  for (const [menu, opener] of [
+    ["patient-menu", "patient-btn"],
+    ["account-menu", "account-btn"],
+  ]) {
+    show($(menu), false);
+    $(opener).setAttribute("aria-expanded", "false");
+  }
+}
+
+/** A dropdown that opens on its button and closes on anything else. */
+function wireMenu(openerId, menuId, canOpen = () => true) {
+  $(openerId).addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = $(menuId).hidden && canOpen();
+    closeMenus();
+    show($(menuId), open);
+    $(openerId).setAttribute("aria-expanded", String(open));
+  });
 }
 
 // ---------------------------------------------------------------- wiring
@@ -603,17 +759,32 @@ function wire() {
 
   $("speak").addEventListener("click", onSpeak);
   $("sheet-close").addEventListener("click", closeSheet);
-  $("replay-guide").addEventListener("click", () => openGuide());
+  $("open-guide").addEventListener("click", () => openGuide());
+  $("brand").addEventListener("click", (event) => {
+    event.preventDefault();
+    go("home");
+  });
+
+  $("question-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    askQuestion($("question-input").value);
+  });
+
+  wireMenu("patient-btn", "patient-menu", () => state.patients.length > 1);
+  wireMenu("account-btn", "account-menu");
+  document.addEventListener("click", closeMenus);
 
   $("sign-out").addEventListener("click", async () => {
-    voice.stop();
+    stopSpeaking();
     stopPolling();
     await api.signOut().catch(() => {});
     location.reload();
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !$("sheet").hidden) closeSheet();
+    if (event.key !== "Escape") return;
+    if (!$("sheet").hidden) return closeSheet();
+    closeMenus();
   });
 
   // A report shared from the phone lands back here with ?shared=N.
@@ -629,7 +800,7 @@ function wire() {
   });
 
   // Speaking does not survive the page going away.
-  window.addEventListener("pagehide", () => voice.stop());
+  window.addEventListener("pagehide", stopSpeaking);
 }
 
 wire();

@@ -89,6 +89,17 @@
                 stroke="currentColor" stroke-width="1.6" />
           <path d="M10.5 18h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
         </symbol>
+        <symbol id="i-caret" viewBox="0 0 24 24">
+          <path d="M7 10l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round" />
+        </symbol>
+        <symbol id="i-ask" viewBox="0 0 24 24">
+          <path d="M20.5 12a8.5 8.5 0 01-12.2 7.6L3.5 20.5l1-4.6A8.5 8.5 0 1120.5 12z"
+                fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+          <path d="M9.9 9.6a2.2 2.2 0 113.5 1.8c-.8.5-1.4.9-1.4 1.9" fill="none"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+          <circle cx="12" cy="16.3" r="0.9" fill="currentColor" />
+        </symbol>
         <symbol id="i-page" viewBox="0 0 24 24">
           <path d="M6 3.5h7.5L18 8v12.5H6z" fill="none" stroke="currentColor"
                 stroke-width="1.6" stroke-linejoin="round" />
@@ -143,12 +154,40 @@
     <div class="frame" id="app" hidden>
       <header class="topbar">
         <div class="topbar-row">
-          <span class="brand">Arogya Vahi</span>
-          <span class="session">
-            <b id="session-patient">—</b>
-            <span class="sep">·</span>
-            <span id="session-account">—</span>
-          </span>
+          <a class="brand" href="#" id="brand">
+            <svg width="26" height="26" aria-hidden="true"><use href="#i-mark" /></svg>
+            <span>
+              <b>Arogya Vahi</b>
+              <small>आरोग्य वही</small>
+            </span>
+          </a>
+
+          <!-- Whose reports are on screen. A switcher when the family has more than one. -->
+          <div class="switcher" id="switcher" hidden>
+            <span class="switcher-label">Reports for</span>
+            <button class="switcher-btn" id="patient-btn" aria-haspopup="listbox"
+                    aria-expanded="false">
+              <span id="patient-name">—</span>
+              <svg width="14" height="14" aria-hidden="true"><use href="#i-caret" /></svg>
+            </button>
+            <ul class="menu" id="patient-menu" role="listbox" hidden></ul>
+          </div>
+
+          <div class="topbar-end">
+            <button class="icon-btn" id="open-guide" title="Guide" aria-label="Guide">
+              <svg width="19" height="19"><use href="#i-book" /></svg>
+            </button>
+            <div class="account">
+              <button class="icon-btn avatar" id="account-btn" aria-haspopup="menu"
+                      aria-expanded="false" aria-label="Account">
+                <span id="account-initial">·</span>
+              </button>
+              <div class="menu menu--right" id="account-menu" role="menu" hidden>
+                <p class="menu-head">Signed in as <b id="account-name">—</b></p>
+                <button class="menu-item" id="sign-out" role="menuitem">Sign out</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <nav class="nav" role="tablist" aria-label="Sections">
@@ -164,6 +203,10 @@
           <button class="tab" role="tab" data-screen="trend" aria-selected="false">
             <svg><use href="#i-chart" /></svg>
             Changes
+          </button>
+          <button class="tab" role="tab" data-screen="question" aria-selected="false">
+            <svg><use href="#i-ask" /></svg>
+            Ask
           </button>
           <button class="tab" role="tab" data-screen="ask" aria-selected="false">
             <svg><use href="#i-check-circle" /></svg>
@@ -273,7 +316,33 @@
           </div>
         </section>
 
-        <!-- ---------------------------------------- questions -->
+        <!-- ---------------------------------------- ask a question -->
+        <!-- The part she talks to. Gemma reads the question; code writes every answer
+             from saved values, so no number here was ever invented. -->
+        <section class="screen" id="screen-question" hidden aria-labelledby="question-h">
+          <div class="panel panel--accent">
+            <div class="panel-head">
+              <h1 id="question-h">Ask about the reports</h1>
+            </div>
+            <div class="panel-body">
+              <p class="lede" style="margin-top: 0">
+                Ask in Marathi or English. Every number in the answer is read out of a
+                report — if it isn't there, the app says so instead of guessing.
+              </p>
+
+              <form id="question-form" class="asker">
+                <input id="question-input" type="text" autocomplete="off"
+                       placeholder="माझी साखर वाढली आहे का?" aria-label="Your question" />
+                <button class="btn btn--primary" type="submit" id="question-send">Ask</button>
+              </form>
+
+              <div class="chips" id="question-examples"></div>
+              <div id="answer"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------- the review queue -->
         <section class="screen" id="screen-ask" hidden aria-labelledby="ask-h">
           <div class="panel">
             <div class="panel-head"><h1 id="ask-h">To check</h1></div>
@@ -294,21 +363,7 @@
             <div class="panel-body"><div id="people-list"></div></div>
           </div>
 
-          <div class="panel">
-            <div class="panel-head">
-              <h2>This session</h2>
-              <span class="meta" id="who"></span>
-            </div>
-            <div class="panel-body">
-              <div class="btn-row">
-                <button class="btn btn--sm" id="replay-guide">
-                  <svg width="16" height="16"><use href="#i-book" /></svg>
-                  Open the guide
-                </button>
-                <button class="btn btn--sm" id="sign-out">Sign out</button>
-              </div>
-            </div>
-          </div>
+
         </section>
       </main>
     </div>

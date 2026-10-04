@@ -6,17 +6,21 @@ schema all at once, Gemma returned 2 of 6 tests on a scanned page; asked only to
 transcribe it, it read every line, and the text step then found all 6.
 """
 
+import logging
 from functools import cache
 from string import Template
 
 import httpx
 import ollama
+from pydantic import BaseModel, ValidationError
 
 from arogya_vahi.config import settings
 from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.models import PageExtraction, PageInput
 from arogya_vahi.resources import read_text
+
+logger = logging.getLogger(__name__)
 
 PAGE_SCHEMA = PageExtraction.model_json_schema()  # Ollama constrains Gemma's reply to this
 SYSTEM_PROMPT = Template(read_text("prompts", "extract_page.txt").rstrip("\n")).substitute(
@@ -54,6 +58,25 @@ def extract_results(page: PageInput, model: str, retry: bool = False) -> PageExt
         ],
     )
     return PageExtraction.model_validate_json(response.message.content)
+
+
+def ask_json(prompt: str, schema: type[BaseModel], model: str) -> BaseModel | None:
+    """One question whose answer must fit `schema`, or None when the reply does not.
+
+    Used where Gemma chooses between fixed options rather than writing anything -- see
+    arogya_vahi.ask, where it reads a question but never answers it.
+    """
+    response = _chat(
+        model=model,
+        options=_options(),
+        format=schema.model_json_schema(),
+        messages=[{"role": "user", "content": prompt}],
+    )
+    try:
+        return schema.model_validate_json(response.message.content)
+    except ValidationError:
+        logger.debug("Gemma's reply did not fit %s: %r", schema.__name__, response.message.content)
+        return None
 
 
 def _options(retry: bool = False) -> dict[str, float | int]:

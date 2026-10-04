@@ -20,7 +20,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from arogya_vahi import accounts, cli, db, ingest, jobs, patients
+from arogya_vahi import accounts, ask, cli, db, ingest, jobs, patients, speech
 from arogya_vahi.change import every_timeline
 from arogya_vahi.config import settings
 from arogya_vahi.errors import UserError
@@ -32,6 +32,7 @@ from arogya_vahi.web import WEB_DIR, Connection, Reader, SessionToken, Viewer
 logger = logging.getLogger(__name__)
 
 PAGE_CACHE = "private, max-age=86400"  # her own browser may keep a page picture; no proxy may
+ASK_DOCTOR = "डॉक्टरांना विचारा:"  # said before the questions, in the summary and aloud
 
 
 class MergeRequest(BaseModel):
@@ -58,6 +59,20 @@ class SignInReply(BaseModel):
     access_token: str
     token_type: str = "bearer"
     name: str
+
+
+class Question(BaseModel):
+    """A question she asked, in her own words."""
+
+    question: str = Field(min_length=1, max_length=400)
+    patient_id: int | None = None
+
+
+class Spoken(BaseModel):
+    """Whether this computer can read the summary aloud in Marathi itself."""
+
+    installed: bool
+    voice: str
 
 
 class Me(BaseModel):
@@ -184,6 +199,44 @@ def create_app(worker: jobs.Worker | None = None) -> FastAPI:
         except UserError as missing:  # a page the report doesn't have is a not-found, not a bad request
             raise HTTPException(404, str(missing)) from None
         return Response(content=picture, media_type="image/png", headers={"Cache-Control": PAGE_CACHE})
+
+    @app.post("/api/ask")
+    def ask_question(body: Question, conn: Connection, reader: Reader) -> ask.Answer:
+        """Answer a question about the saved reports, using only values found in them.
+
+        Gemma reads the question and says which test and what kind of question it is;
+        code writes every sentence from stored results. The model never sees a number
+        and never writes one.
+        """
+        return ask.answer(conn, body.question, patient_id=body.patient_id)
+
+    @app.get("/api/voice")
+    def voice(reader: Reader) -> Spoken:
+        """Whether this computer can read the summary aloud in Marathi itself."""
+        return Spoken(installed=speech.installed(), voice=speech.VOICE)
+
+    @app.get("/api/summary/audio", response_class=Response)
+    def summary_audio(conn: Connection, reader: Reader, patient: int | None = None) -> Response:
+        """The Marathi summary as speech, said by this computer.
+
+        The same sentences the screen shows, in the same order, so what she hears and
+        what she reads cannot drift apart. A browser can only speak what its system has,
+        and Windows has no Marathi voice; this route is how a laptop says them at all.
+        """
+        said = summarize(db.timeline_points(conn, _patient(conn, patient)))
+        lines = [*said.sentences, *([ASK_DOCTOR, *said.questions] if said.questions else [])]
+        if not lines:
+            raise HTTPException(404, "There is nothing to say yet.")
+        if not speech.installed():
+            raise HTTPException(
+                503,
+                "The Marathi voice is not installed on this computer. Run: arogya-voice install",
+            )
+        return Response(
+            content=speech.say(" ".join(lines)),
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},  # it changes when a report is added
+        )
 
     # ------------------------------------------------------------ what a person decides
 

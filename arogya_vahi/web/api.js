@@ -65,10 +65,26 @@ export function send(files) {
 }
 
 export const uploads = () => request("/api/uploads");
-export const summary = () => request("/api/summary");
-export const timelines = () => request("/api/timelines");
-export const questions = () => request("/api/questions");
 export const patients = () => request("/api/patients");
+
+/** The screens are all about one person; `patient` says which, or null for the latest. */
+const forPatient = (path, patient) =>
+  request(patient ? `${path}?patient=${patient}` : path);
+
+export const summary = (patient) => forPatient("/api/summary", patient);
+export const timelines = (patient) => forPatient("/api/timelines", patient);
+export const questions = (patient) => forPatient("/api/questions", patient);
+
+/** Her question, answered only from values the app found in her reports. */
+export const ask = (question, patient = null) =>
+  json("/api/ask", "POST", { question, patient_id: patient });
+
+/** Whether this computer can read the summary aloud in Marathi itself. */
+export const voice = () => request("/api/voice");
+
+/** The summary spoken in Marathi, as a WAV this computer made. */
+export const summaryAudio = (patient) =>
+  patient ? `/api/summary/audio?patient=${patient}` : "/api/summary/audio";
 
 export const review = (resultId, decision) =>
   json(`/api/results/${resultId}/review`, "POST", { decision });
