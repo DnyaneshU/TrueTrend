@@ -8,8 +8,8 @@ import pytest
 from factories import FakeGemma
 from hypothesis import settings as hypothesis_settings
 
-from arogya_vahi import db, gemma
-from arogya_vahi.config import Settings, settings
+from truetrend import db, gemma
+from truetrend.config import Settings, settings
 
 # CI runs the property tests reproducibly: HYPOTHESIS_PROFILE=ci pytest
 hypothesis_settings.register_profile("ci", derandomize=True, print_blob=True)
@@ -20,7 +20,7 @@ hypothesis_settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default")
 def storage(tmp_path, monkeypatch):
     """Every test runs with the default settings and its own empty storage folder.
 
-    Nothing from AROGYA_* variables or a .env file applies, and the real storage/ is
+    Nothing from TRUETREND_* variables or a .env file applies, and the real storage/ is
     never touched.
     """
     defaults = Settings.model_construct()
@@ -136,7 +136,7 @@ def client():
     """The API with no background worker: a test reads the queue itself."""
     from fastapi.testclient import TestClient
 
-    from arogya_vahi.server import create_app
+    from truetrend.server import create_app
 
     with TestClient(create_app()) as test_client:
         yield test_client

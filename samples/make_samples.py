@@ -84,7 +84,7 @@ CITYCARE = Lab(
 # cases are judged against different thresholds, which is worth being able to see.
 #
 # Every value below was checked against the real Reference Change Value for its test
-# (arogya_vahi.change) before being written here, so the samples show each verdict
+# (truetrend.change) before being written here, so the samples show each verdict
 # the app can give, and none of them by accident:
 #
 #   HbA1c   6.8 -> 7.6  same lab, +11.8% against a 4.2% threshold   -> real increase

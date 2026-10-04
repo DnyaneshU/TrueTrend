@@ -3,9 +3,9 @@
 from datetime import date
 from itertools import count
 
-from arogya_vahi import db
-from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.models import PageExtraction, PrintedPerson, ReportRecord, Result, SavedResult, TimelinePoint
+from truetrend import db
+from truetrend.lab_tests import CATALOG
+from truetrend.models import PageExtraction, PrintedPerson, ReportRecord, Result, SavedResult, TimelinePoint
 
 _ids = count(1)
 

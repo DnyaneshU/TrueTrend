@@ -1,10 +1,12 @@
 """Signing in, staying signed in, and what a signed-out browser may not see."""
 
+import re
+
 import pytest
 from factories import saved_report, saved_result
 
-from arogya_vahi import accounts
-from arogya_vahi.config import settings
+from truetrend import accounts
+from truetrend.config import settings
 
 PASSWORD = "liquorice-tractor-92"
 
@@ -197,5 +199,61 @@ def test_the_website_loads_nothing_from_the_internet(client):
 
 
 def test_the_app_is_one_module_per_job(client):
-    for module in ("api.js", "mr.js", "dom.js", "chart.js", "guide.js"):
+    for module in ("api.js", "text.js", "dom.js", "chart.js", "guide.js", "voice.js"):
         assert client.get(f"/{module}").status_code == 200
+
+
+DEVANAGARI = re.compile(r"[\u0900-\u097f]")
+
+
+def test_the_interface_is_english_and_only_what_is_spoken_is_marathi(client):
+    # The split the user asked for: labels, buttons and screens in English, and Marathi
+    # only where the app speaks to her about her own results. Those sentences are built
+    # by the server (summary.py), so the page's own files should carry almost no Marathi.
+    body = client.get("/").text.split("</svg>", 1)[1]  # past the icon definitions
+    marathi = {line.strip() for line in body.splitlines() if DEVANAGARI.search(line)}
+    # The app's own name, and the example question in the box that invites one. Both are
+    # addressed to her; neither is a label of the interface.
+    assert marathi == {
+        "<span>आरोग्य वही</span>",  # the name on the sign-in screen
+        "<small>आरोग्य वही</small>",  # and in the header, under the English one
+        'placeholder="माझी साखर वाढली आहे का?" aria-label="Your question" />',
+    }
+
+
+def test_the_app_speaks_marathi_about_the_results(client):
+    # The other half of the same rule: everything the app says about her results is
+    # Marathi, and the page writes none of those sentences itself -- the server builds
+    # them from templates. What is left here is the heading said before the doctor's
+    # questions, and the example questions she can tap instead of typing.
+    app_js = client.get("/app.js").text
+    spoken = [line.strip() for line in app_js.splitlines() if DEVANAGARI.search(line)]
+    assert any("डॉक्टरांना विचारा" in line for line in spoken)
+    assert all("?" in line or "विचारा" in line for line in spoken), spoken
+
+
+def test_hidden_really_hides(client):
+    # `hidden` works by setting display:none, which any explicit `display` in a rule
+    # beats. Both the sign-in screen and the app set display, so without this the app
+    # showed the login form and the signed-in page at the same time.
+    css = " ".join(client.get("/styles.css").text.split())  # line endings differ by platform
+    assert "[hidden] { display: none !important; }" in css
+
+
+# ---------------------------------------------------------------- the Marathi voice
+
+
+def test_the_app_says_whether_this_computer_can_speak_marathi(signed_in):
+    spoken = signed_in.get("/api/voice").json()
+    assert spoken == {"installed": False, "voice": "mr_IN-google-medium"}
+
+
+def test_asking_for_audio_without_the_voice_says_how_to_get_it(signed_in, conn):
+    saved_report(conn, "a", [saved_result("HBA1C", 9.1, ref_high=5.6)], sample_date="2026-01-15")
+    signed_in.get("/api/patients")  # match the report, so the summary has something to say
+    response = signed_in.get("/api/summary/audio")
+    assert response.status_code == 503 and "truetrend-voice install" in response.json()["detail"]
+
+
+def test_a_signed_out_browser_cannot_ask_for_the_audio(anyone):
+    assert anyone.get("/api/summary/audio").status_code == 401

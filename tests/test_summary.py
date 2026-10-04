@@ -15,9 +15,9 @@ from factories import saved_report, saved_result, timeline_point
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi import marathi
-from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.summary import PRIORITY, TEMPLATES, Templates, main, summarize, template_placeholders
+from truetrend import marathi
+from truetrend.lab_tests import CATALOG
+from truetrend.summary import PRIORITY, TEMPLATES, Templates, main, summarize, template_placeholders
 
 DEVANAGARI_NUMBER = re.compile(r"[०-९]+(?:\.[०-९]+)?")
 JAN, APR, JUL = date(2026, 1, 15), date(2026, 4, 15), date(2026, 7, 15)
@@ -335,7 +335,7 @@ def test_main_warns_about_reports_left_out(conn, caplog):
 
 
 def test_main_with_nothing_saved_says_how_to_start(capsys, caplog):
-    caplog.set_level("INFO", logger="arogya_vahi")
+    caplog.set_level("INFO", logger="truetrend")
     assert main([]) == 0
     assert capsys.readouterr().out == ""
     assert "No saved report has a sample date yet" in caplog.text

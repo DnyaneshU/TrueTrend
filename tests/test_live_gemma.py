@@ -1,18 +1,18 @@
 """Calls the real local Gemma through Ollama (about two minutes).
 
-Run with:  AROGYA_LIVE=1 .venv/Scripts/python -m pytest tests/test_live_gemma.py -v
+Run with:  TRUETREND_LIVE=1 .venv/Scripts/python -m pytest tests/test_live_gemma.py -v
 """
 
 import os
 
 import pytest
 
-from arogya_vahi.extract import run
+from truetrend.extract import run
 
 pytestmark = [
     pytest.mark.live,
     pytest.mark.skipif(
-        os.environ.get("AROGYA_LIVE") != "1", reason="set AROGYA_LIVE=1 to call the real local Gemma"
+        os.environ.get("TRUETREND_LIVE") != "1", reason="set TRUETREND_LIVE=1 to call the real local Gemma"
     ),
 ]
 

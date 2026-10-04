@@ -4,9 +4,9 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.models import Result
-from arogya_vahi.normalize import normalize, parse_range, parse_value
+from truetrend.lab_tests import CATALOG
+from truetrend.models import Result
+from truetrend.normalize import normalize, parse_range, parse_value
 
 numbers = st.decimals(min_value=0, max_value=99_999, places=3, allow_nan=False, allow_infinity=False)
 spaces = st.sampled_from(["", " ", "  "])

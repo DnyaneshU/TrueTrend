@@ -1,10 +1,10 @@
-# Arogya Vahi (आरोग्य वही)
+# TrueTrend (आरोग्य वही)
 
 Keeps a family's lab reports in one place, checks every value against the report it came
 from, and says in Marathi what changed and whether the change is real or normal
 variation. It runs on a home laptop with Gemma 4 through Ollama: reports never leave it.
 
-> **Not medical advice.** Arogya Vahi only compares results with the lab's printed range
+> **Not medical advice.** TrueTrend only compares results with the lab's printed range
 > and with earlier results, and suggests questions to ask the doctor. It does not
 > diagnose, and it never advises on diet or medicine.
 
@@ -28,31 +28,38 @@ On macOS or Linux use `.venv/bin/python` instead of `.venv\Scripts\python`.
 ## Use
 
 ```powershell
-arogya-extract "C:\path\to\report.pdf"   # read a report, verify it, save it, print it as JSON
-arogya-summary                           # the Marathi summary of the latest report
-arogya-summary --json                    # ... with every finding and judged change
-arogya-summary --patient 2               # ... of patient #2's latest report
-arogya-patients                          # who each report is for
-arogya-patients merge 1 3                # patients #1 and #3 are the same person
-arogya-patients assign 7 2               # report #7 is patient #2's ("new": someone new)
-arogya-recheck                           # re-verify everything saved, without calling Gemma
-arogya-serve                             # the web server and its API, on this computer
+truetrend-extract "C:\path\to\report.pdf"   # read a report, verify it, save it, print it as JSON
+truetrend-summary                           # the Marathi summary of the latest report
+truetrend-summary --json                    # ... with every finding and judged change
+truetrend-summary --patient 2               # ... of patient #2's latest report
+truetrend-patients                          # who each report is for
+truetrend-patients merge 1 3                # patients #1 and #3 are the same person
+truetrend-patients assign 7 2               # report #7 is patient #2's ("new": someone new)
+truetrend-recheck                           # re-verify everything saved, without calling Gemma
+truetrend-serve                             # the web server and its API, on this computer
 ```
 
-Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck|server>`, and each has
+Each command is also `python -m truetrend.<extract|summary|patients|recheck|server>`, and each has
 `--help`. Progress and warnings go to the terminal; JSON goes to standard output.
 
-- `arogya-extract --force` reads a report that is already saved again; `--model
+- `truetrend-extract --force` reads a report that is already saved again; `--model
   gemma4:e2b` uses the smaller model.
-- Run `arogya-recheck` after editing the catalog (names, units, believable limits) or
+- Run `truetrend-recheck` after editing the catalog (names, units, believable limits) or
   after updating the app. It also matches reports saved before patient matching existed
-  (so do `arogya-summary` and `arogya-patients`).
+  (so do `truetrend-summary` and `truetrend-patients`).
 
 ## The web app
 
-`arogya-serve` opens the website at `http://127.0.0.1:8000`. It is in Marathi, built for
-a phone held by someone who is not looking for a computer, and it needs no internet: even
-the chart library is served from this computer.
+`truetrend-serve` opens the website at `http://127.0.0.1:8000`. It is built for a phone held
+by someone who is not looking for a computer, and it needs no internet: even the chart
+library is served from this computer.
+
+**Two languages, on purpose.** The interface is English -- every label, button and screen
+name. What the app *says about her results* is Marathi: the summary sentences, the
+questions for the doctor, and the voice. Those are the sentences she is meant to read and
+hear, and they are built by the server from templates in
+`truetrend/data/summary_mr.toml`, with every number filled in by code. The page never
+writes one of them itself; it passes them through as they come.
 
 The first person to open it makes an account, and after that the reports are behind it.
 The account is made here and only here -- sign-in is the OAuth 2.0 password grant served
@@ -61,17 +68,17 @@ leaves the laptop. A session lasts a year, so she signs in once on her phone.
 
 **The five screens**, along the bottom of the phone:
 
-| | | |
-|---|---|---|
-| **सारांश** | Summary | What changed in the latest report, in at most three sentences, with a **ऐका** button that reads them aloud, and the questions to ask at the next visit |
-| **जोडा** | Add | Pick a report from the phone, and watch it go रांगेत (queued) to वाचत आहे (reading) to तयार (ready). It shows the WhatsApp -> Save to Files steps for anyone who has not done it before |
-| **बदल** | Changes | One row per test with its latest value; tap it for the chart, the lab's normal range behind it, and every change judged as a real change or normal variation |
-| **तपासा** | Check | Everything waiting for a person: a value the code could not find, two patients who may be one person, the same report sent twice |
-| **माणसं** | People | Which report belongs to whom, and the account |
+| Screen | What it is for |
+|---|---|
+| **Summary** | What changed in the latest report, in at most three Marathi sentences, with a **Listen** button that reads them aloud, and the questions to ask at the next visit |
+| **Add** | Pick a report from the phone, and watch it go from Waiting to Reading to Done. It shows the WhatsApp -> Save to Files steps for anyone who has not done it before |
+| **Changes** | One row per test with its latest value; tap it for the chart, the lab's normal range behind it, and every change judged as a real change or normal variation |
+| **Check** | Everything waiting for a person: a value the code could not find, two patients who may be one person, the same report sent twice |
+| **People** | Which report belongs to whom, and the account |
 
 A first-time reader is shown a short guide -- what the app does, what each of the five
-keys is for, what each colour means, and that it never gives medical advice. It can be
-read again any time from **मदत**.
+buttons is for, what each colour means, and that it never gives medical advice. It can be
+read again any time from **Guide**.
 
 **Tapping a value shows where it is printed.** Safari ignores a PDF link's `#page=N`, so
 tapping a point on a chart would only ever open page 1 of a 19-page report. Instead the
@@ -79,12 +86,12 @@ server draws that page as a picture with the value ringed on it, so she sees the
 in its own row, in the lab's own layout.
 
 **On an iPhone**, she saves the report from WhatsApp (share -> Save to Files), opens the
-website, taps **रिपोर्ट जोडा** and picks it. On Android the browser's share sheet can send
-it straight to the app.
+website, taps **Add** and picks it. On Android the browser's share sheet can send it
+straight to the app.
 
 ## The server and its API
 
-`arogya-serve` runs on `http://127.0.0.1:8000`, on this computer only. Sent files
+`truetrend-serve` runs on `http://127.0.0.1:8000`, on this computer only. Sent files
 wait in a queue, and one background worker reads them with Gemma, one at a time, in the
 order they came (each takes minutes and the whole GPU). The queue is kept in the database,
 so files left half-read by a stop are read again on the next start. A phone reaches the
@@ -116,7 +123,7 @@ keeps) or an `Authorization: Bearer` header (what a script or an iOS Shortcut se
 Before the first account is made the app is open, because refusing everything would lock
 the only person who can make one out of her own laptop.
 
-A person's decision on a value outranks the code's: `arogya-recheck` never undoes it.
+A person's decision on a value outranks the code's: `truetrend-recheck` never undoes it.
 `/docs` describes every request.
 
 ## How it works
@@ -150,7 +157,7 @@ A person's decision on a value outranks the code's: `arogya-recheck` never undoe
    [EFLM Biological Variation Database](https://biologicalvariation.eu/); CVa is EFLM's
    minimum standard, 0.75 × CVi, since a lab's own precision is unknown, which keeps the
    judgement cautious; between-lab CVs come from published external quality assessment.
-   Each source is cited in `arogya_vahi/data/lab_tests.toml`. A test without sourced
+   Each source is cited in `truetrend/data/lab_tests.toml`. A test without sourced
    constants, or two labs without a between-lab CV, is not judged rather than guessed.
 5. **The Marathi summary.** At most three sentences, most important first: a real change
    in the same direction three times in a row, a real change since the previous sample, a
@@ -163,7 +170,7 @@ A person's decision on a value outranks the code's: `arogya-recheck` never undoe
    case, punctuation, word order and titles ("Mrs. Sunita Patil" = "PATIL SUNITA"), and a
    middle initial only one of the two prints ("Sunita R. Patil" = "Sunita Patil"). Nothing
    else is guessed: "S. Patil" or "Sunita Ramesh Patil" is a new patient until
-   `arogya-patients merge` joins the two, and then that spelling is remembered. Someone
+   `truetrend-patients merge` joins the two, and then that spelling is remembered. Someone
    else is someone else:
    - "Sunita K. Patil", when the patient is also printed as "Sunita R. Patil" (a middle
      initial is a father's or husband's name);
@@ -173,7 +180,7 @@ A person's decision on a value outranks the code's: `arogya-recheck` never undoe
 
    each with a warning saying how to merge them if they are the same person. A report
    that could be two patients, or names no one ("Mrs.", "Patient"), is matched to no one
-   and compared with nothing. `arogya-patients assign` moves a report; a report read
+   and compared with nothing. `truetrend-patients assign` moves a report; a report read
    again with `--force` stays with the patient it was for. Two reports read at once can't
    both add the same new patient.
 
@@ -181,36 +188,36 @@ A person's decision on a value outranks the code's: `arogya-recheck` never undoe
 
 | What | Where |
 |---|---|
-| The tests read, the names labs print for them, look-alike tests to reject, standard units, conversions, believable limits, variation constants with their sources, cross-test checks | `arogya_vahi/data/lab_tests.toml` |
-| How labs print a person: titles, sex words, relation markers (B/O), placeholder names, age units | `arogya_vahi/data/people.toml` |
-| The summary's Marathi sentences and doctor questions | `arogya_vahi/data/summary_mr.toml` |
-| The instructions sent to Gemma | `arogya_vahi/prompts/` |
-| Model, Ollama host and options, page-reading and verification thresholds, storage folder | `arogya_vahi/config.py` |
+| The tests read, the names labs print for them, look-alike tests to reject, standard units, conversions, believable limits, variation constants with their sources, cross-test checks | `truetrend/data/lab_tests.toml` |
+| How labs print a person: titles, sex words, relation markers (B/O), placeholder names, age units | `truetrend/data/people.toml` |
+| The summary's Marathi sentences and doctor questions | `truetrend/data/summary_mr.toml` |
+| The instructions sent to Gemma | `truetrend/prompts/` |
+| Model, Ollama host and options, page-reading and verification thresholds, storage folder | `truetrend/config.py` |
 
-Every setting in `config.py` can be overridden with an `AROGYA_*` environment variable or
+Every setting in `config.py` can be overridden with an `TRUETREND_*` environment variable or
 a `.env` file in the folder you run the commands from, for example:
 
 ```ini
-AROGYA_MODEL=gemma4:e2b
-AROGYA_STORAGE_DIR=D:/arogya
+TRUETREND_MODEL=gemma4:e2b
+TRUETREND_STORAGE_DIR=D:/truetrend
 ```
 
-The database (`arogya.db`) and the stored original PDFs (`originals/<sha256>.pdf`) live in
+The database (`truetrend.db`) and the stored original PDFs (`originals/<sha256>.pdf`) live in
 the storage folder: `storage/` in a source checkout, otherwise the user's data folder
-(`%LOCALAPPDATA%\arogya-vahi` on Windows).
+(`%LOCALAPPDATA%\truetrend` on Windows).
 
 ### Adding a test
 
-Add a `[[tests]]` entry to `arogya_vahi/data/lab_tests.toml` (the comments at the top of
-the file describe every field), then run `arogya-recheck`. No code changes are needed.
+Add a `[[tests]]` entry to `truetrend/data/lab_tests.toml` (the comments at the top of
+the file describe every field), then run `truetrend-recheck`. No code changes are needed.
 Leave `variation` out until its constants can be cited: changes in the test are then shown
 but not judged.
 
 ## Privacy
 
-- Reports are sent only to the Ollama at `AROGYA_OLLAMA_HOST`, which must be this computer
+- Reports are sent only to the Ollama at `TRUETREND_OLLAMA_HOST`, which must be this computer
   (`http://127.0.0.1:11434` by default). A remote host is refused unless
-  `AROGYA_ALLOW_REMOTE_OLLAMA=true`. The `OLLAMA_HOST` environment variable is ignored.
+  `TRUETREND_ALLOW_REMOTE_OLLAMA=true`. The `OLLAMA_HOST` environment variable is ignored.
 - `storage/`, databases, PDFs and report photos are gitignored. Never commit real reports;
   tests use synthetic ones only.
 - Accounts are made on this computer and nowhere else. Signing in contacts no one: there
@@ -219,7 +226,7 @@ but not judged.
   salt) and a session token only as its SHA-256, so neither the database nor a backup of
   it reveals either one.
 - The website loads nothing from the internet -- no fonts, no analytics, no CDN. Chart.js
-  is served from `arogya_vahi/web/vendor/`.
+  is served from `truetrend/web/vendor/`.
 
 ## Limitations
 
@@ -245,9 +252,9 @@ but not judged.
 
 ```powershell
 .venv\Scripts\python -m pytest                                # fast tests; never calls Gemma
-$env:AROGYA_LIVE = "1"; .venv\Scripts\python -m pytest -m live; Remove-Item Env:AROGYA_LIVE
+$env:TRUETREND_LIVE = "1"; .venv\Scripts\python -m pytest -m live; Remove-Item Env:TRUETREND_LIVE
                                                               # the real local Gemma (~2 min)
-.venv\Scripts\ruff check arogya_vahi tests; .venv\Scripts\ruff format arogya_vahi tests
+.venv\Scripts\ruff check truetrend tests; .venv\Scripts\ruff format truetrend tests
 ```
 
 Tests run with the default settings and a temporary storage folder, whatever is in your
@@ -271,11 +278,11 @@ published for that test.
 | `normalize.py` | Values, units and normal ranges as numbers in standard units |
 | `verify.py` | Each result checked against the PDF, its believable limits and the report's other results |
 | `change.py` | Real change or normal variation, by the Reference Change Value |
-| `summary.py` | The Marathi summary and doctor questions (the `arogya-summary` command) |
-| `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
+| `summary.py` | The Marathi summary and doctor questions (the `truetrend-summary` command) |
+| `patients.py`, `people.py` | Which family member a report is for (the `truetrend-patients` command); printed names, sex and ages |
 | `server.py`, `web.py`, `ingest.py`, `jobs.py` | The web server and its API; who is signed in; files people send; the worker that reads them |
 | `accounts.py`, `highlight.py` | Accounts and sessions on this computer; a report page drawn with one value ringed |
-| `web/` | The website: `index.html`, `styles.css`, and `app.js` over `api.js` (requests), `mr.js` (Marathi text), `dom.js`, `chart.js`, `guide.js` |
+| `web/` | The website: `index.html`, `styles.css`, and `app.js` over `api.js` (requests), `text.js` (what the page says, and dates), `dom.js`, `chart.js`, `guide.js` |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |

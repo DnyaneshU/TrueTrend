@@ -1,8 +1,8 @@
 import pytest
 
-from arogya_vahi.errors import UserError
-from arogya_vahi.models import PageExtraction, PageInput
-from arogya_vahi.pipeline import extract_pages
+from truetrend.errors import UserError
+from truetrend.models import PageExtraction, PageInput
+from truetrend.pipeline import extract_pages
 
 INVALID = "invalid"
 
@@ -270,7 +270,7 @@ def test_replies_are_kept_for_raw_json():
 
 
 def test_progress_is_logged(caplog):
-    caplog.set_level("INFO", logger="arogya_vahi")
+    caplog.set_level("INFO", logger="truetrend")
     extract_pages(pages(1), ScriptedAsk({1: [reply([row()])]}), no_transcribe)
     assert "page 1/1 · text · 1 result ·" in caplog.text
 

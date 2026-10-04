@@ -2,8 +2,8 @@
 
 import pytest
 
-from arogya_vahi import accounts, db
-from arogya_vahi.errors import UserError
+from truetrend import accounts, db
+from truetrend.errors import UserError
 
 
 def test_a_password_is_never_stored_as_typed(conn):

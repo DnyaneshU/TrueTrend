@@ -3,7 +3,7 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "arogya-vahi"
+name = "truetrend"
 version = "0.1.0"
 description = "Keeps a family's lab reports in one place, verifies every value against the PDF and explains changes in Marathi, with local Gemma; reports never leave the laptop."
 readme = "README.md"
@@ -36,6 +36,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The Marathi voice that reads the summary aloud. Optional because Windows ships no
+# Marathi voice and a phone already has one: without this the app uses the browser's.
+voice = ["piper-tts>=1.8,<2"]
 dev = [
     "pytest>=9.1,<10",
     "hypothesis>=6.168,<7",
@@ -48,17 +51,19 @@ dev = [
 Repository = "https://github.com/DnyaneshU/TrueTrend"
 
 [project.scripts]
-arogya-extract = "arogya_vahi.extract:main"
-arogya-patients = "arogya_vahi.patients:main"
-arogya-recheck = "arogya_vahi.recheck:main"
-arogya-summary = "arogya_vahi.summary:main"
-arogya-serve = "arogya_vahi.server:main"
+truetrend-extract = "truetrend.extract:main"
+truetrend-patients = "truetrend.patients:main"
+truetrend-recheck = "truetrend.recheck:main"
+truetrend-summary = "truetrend.summary:main"
+truetrend-serve = "truetrend.server:main"
+truetrend-voice = "truetrend.speech:main"
+truetrend-ask = "truetrend.ask:main"
 
 [tool.setuptools.packages.find]
-include = ["arogya_vahi*"]
+include = ["truetrend*"]
 
 [tool.setuptools.package-data]
-arogya_vahi = [
+truetrend = [
     "data/*.toml",
     "prompts/*.txt",
     "schema.sql",
@@ -73,7 +78,7 @@ arogya_vahi = [
 testpaths = ["tests"]
 addopts = "-ra"   # list skipped tests with their reason (e.g. the live Gemma tests)
 filterwarnings = ["error"]   # a new warning fails the suite instead of scrolling past
-markers = ["live: calls the real local Gemma through Ollama (run with AROGYA_LIVE=1)"]
+markers = ["live: calls the real local Gemma through Ollama (run with TRUETREND_LIVE=1)"]
 
 [tool.ruff]
 line-length = 110

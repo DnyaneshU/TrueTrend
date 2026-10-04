@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- The app's mark: a notebook page with a rising line read off it. -->
+  <defs>
+    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22e0d6" />
+      <stop offset=".55" stop-color="#3bd0ff" />
+      <stop offset="1" stop-color="#9d6bff" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#07070d" />
+  <rect x="13" y="9" width="38" height="46" rx="6" fill="none" stroke="url(#neon)" stroke-width="3" />
+  <path d="M21 9v46" stroke="url(#neon)" stroke-width="3" opacity=".5" />
+  <path d="M27 42l8-11 6 4.5 9-15" fill="none" stroke="#ff3d9a" stroke-width="3.6"
+        stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="50" cy="20.5" r="3.4" fill="#ff3d9a" />
+</svg>

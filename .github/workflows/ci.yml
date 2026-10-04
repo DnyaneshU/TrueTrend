@@ -26,8 +26,8 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check arogya_vahi tests
-      - run: ruff format --check arogya_vahi tests
+      - run: ruff check truetrend tests
+      - run: ruff format --check truetrend tests
       - run: python -m pytest
 
   package:
@@ -44,7 +44,7 @@ jobs:
           python -m venv /tmp/clean
           /tmp/clean/bin/pip install dist/*.whl
           cd /tmp
-          /tmp/clean/bin/arogya-recheck --help
-          AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-recheck
-          AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-summary --json
-          AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-patients --json
+          /tmp/clean/bin/truetrend-recheck --help
+          TRUETREND_STORAGE_DIR=/tmp/truetrend /tmp/clean/bin/truetrend-recheck
+          TRUETREND_STORAGE_DIR=/tmp/truetrend /tmp/clean/bin/truetrend-summary --json
+          TRUETREND_STORAGE_DIR=/tmp/truetrend /tmp/clean/bin/truetrend-patients --json

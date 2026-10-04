@@ -1,8 +1,8 @@
 import pymupdf
 import pytest
 
-from arogya_vahi.errors import UserError
-from arogya_vahi.pages import open_pdf, page_text, read_pages
+from truetrend.errors import UserError
+from truetrend.pages import open_pdf, page_text, read_pages
 
 
 def test_page_text_rebuilds_table_rows(make_pdf, report_page):

@@ -3,7 +3,7 @@ from datetime import date
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi import marathi
+from truetrend import marathi
 
 ASCII = str.maketrans("०१२३४५६७८९", "0123456789")
 

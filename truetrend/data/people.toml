@@ -1,0 +1,52 @@
+# How labs print the person a report is for (truetrend/people.py).
+#
+# Words are compared in lower case, after punctuation is removed ("Mrs." = "mrs").
+# Editing this file changes how reports are matched to family members; run
+# truetrend-recheck afterwards. No code changes are needed.
+
+# Printed before a name. Each title says the person's sex ("M" or "F"), or "" for neither.
+[titles]
+mr = "M"
+master = "M"
+shri = "M"
+shree = "M"
+sri = "M"
+"श्री" = "M"
+"चि" = "M"
+mrs = "F"
+ms = "F"
+miss = "F"
+smt = "F"
+kum = "F"
+kumari = "F"
+"श्रीमती" = "F"
+"सौ" = "F"
+"कु" = "F"
+"कुमारी" = "F"
+dr = ""
+"डॉ" = ""
+mx = ""
+
+# The words a lab prints for a person's sex.
+[sexes]
+f = "F"
+female = "F"
+"स्त्री" = "F"
+m = "M"
+male = "M"
+"पुरुष" = "M"
+
+[names]
+# A name with one of these is someone else's child or spouse: "B/O Sunita Patil" is
+# Sunita's baby. It is only ever the same person as a name with the same marker.
+relation_markers = ["b/o", "s/o", "d/o", "w/o", "c/o", "baby of", "child of"]
+# Printed where a lab has no real name: a name made only of these is no name at all.
+placeholders = ["patient", "name", "demo", "test", "sample", "unknown", "na", "nil"]
+
+[ages]
+# A number followed by one of these is an age in years; a lone number is too.
+year_units = ["y", "yr", "yrs", "year", "years", "वर्ष", "वर्षे"]
+# ...and by one of these, an age under a year. A bare "m" is left out: it may mean male.
+under_a_year_units = ["mo", "mon", "month", "months", "mth", "mths", "d", "day", "days", "w", "wk", "wks",
+                      "week", "weeks", "महिना", "महिने", "दिवस"]
+max_age = 120

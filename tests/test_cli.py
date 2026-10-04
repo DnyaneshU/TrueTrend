@@ -6,9 +6,9 @@ from contextlib import closing
 import pytest
 from factories import EMPTY_REPLY, GOOD_REPLY, FakeGemma, report_record
 
-from arogya_vahi import cli, db, patients
-from arogya_vahi.errors import UserError
-from arogya_vahi.extract import main, run
+from truetrend import cli, db, patients
+from truetrend.errors import UserError
+from truetrend.extract import main, run
 
 
 def query(sql, *args):
@@ -101,7 +101,7 @@ def test_saved_results_are_normalised(storage, use_gemma, make_pdf, report_page)
 
 
 def test_same_file_twice_is_skipped_without_calling_gemma(storage, fake_gemma, make_pdf, report_page, caplog):
-    caplog.set_level("INFO", logger="arogya_vahi")
+    caplog.set_level("INFO", logger="truetrend")
     pdf = make_pdf([report_page])
     run(pdf)
     calls = len(fake_gemma.pages)

@@ -8,10 +8,10 @@ import pytest
 from factories import GOOD_REPLY, FakeGemma, rows, saved_report, saved_result
 from fastapi.testclient import TestClient
 
-from arogya_vahi import db, ingest, jobs
-from arogya_vahi.config import settings
-from arogya_vahi.extract import run
-from arogya_vahi.server import create_app
+from truetrend import db, ingest, jobs
+from truetrend.config import settings
+from truetrend.extract import run
+from truetrend.server import create_app
 
 
 def send(client, *files):
@@ -82,7 +82,7 @@ def test_the_worker_reads_a_queued_report(client, report_pdf, fake_gemma):
 
 def test_a_report_saved_before_is_not_saved_again(client, make_pdf, report_page, fake_gemma):
     pdf = make_pdf([report_page])
-    run(pdf)  # read with arogya-extract earlier
+    run(pdf)  # read with truetrend-extract earlier
     send(client, ("report.pdf", pdf.read_bytes()))
     read = jobs.process_next()
     assert (read.status, read.report_id) == ("already_saved", 1)
@@ -103,7 +103,7 @@ def test_the_same_patient_lab_and_sample_date_is_flagged_as_a_duplicate(
 def test_a_report_that_cant_be_read_is_failed_with_why_and_kept(client, report_pdf, use_gemma):
     class Unreachable(FakeGemma):
         def ask(self, page, model, retry=False):
-            from arogya_vahi.errors import UserError
+            from truetrend.errors import UserError
 
             raise UserError("Can't reach Ollama.")
 
@@ -192,7 +192,7 @@ def test_a_value_to_check_is_confirmed_by_a_person_and_stays_confirmed(client, c
     )
     assert client.get("/api/questions").json()["results_to_check"] == []
     with conn:
-        conn.execute("UPDATE results SET status = 'needs_check'")  # as arogya-recheck leaves a scan
+        conn.execute("UPDATE results SET status = 'needs_check'")  # as truetrend-recheck leaves a scan
     assert [p.status for p in db.timeline_points(conn)] == []  # no sample date: off the timeline
     assert rows(conn, "SELECT COALESCE(reviewed, status) FROM results") == [("verified",)]
 
