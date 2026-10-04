@@ -5,6 +5,7 @@ from contextlib import closing
 
 import pymupdf
 import pytest
+from factories import FakeGemma
 from hypothesis import settings as hypothesis_settings
 
 from arogya_vahi import db, gemma
@@ -38,6 +39,21 @@ def no_real_ollama(request, monkeypatch):
             raise AssertionError("this test called the real Ollama; patch gemma or mark it live")
 
         monkeypatch.setattr(gemma, "_client", refuse)
+
+
+@pytest.fixture
+def use_gemma(monkeypatch):
+    def install(fake):
+        monkeypatch.setattr(gemma, "extract_results", fake.ask)
+        monkeypatch.setattr(gemma, "transcribe", fake.transcribe)
+        return fake
+
+    return install
+
+
+@pytest.fixture
+def fake_gemma(use_gemma):
+    return use_gemma(FakeGemma())
 
 
 @pytest.fixture

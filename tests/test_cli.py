@@ -4,74 +4,11 @@ import sqlite3
 from contextlib import closing
 
 import pytest
-from factories import report_record
+from factories import EMPTY_REPLY, GOOD_REPLY, FakeGemma, report_record
 
-from arogya_vahi import cli, db, gemma, patients
+from arogya_vahi import cli, db, patients
 from arogya_vahi.errors import UserError
 from arogya_vahi.extract import main, run
-from arogya_vahi.models import PageExtraction
-
-GOOD_REPLY = {
-    "patient_name": "Mrs. Sunita Patil",
-    "age": "62 Y",
-    "sex": "F",
-    "lab_name": "SUNRISE DIAGNOSTICS",
-    "sample_date": "12/09/2026 08:10",
-    "report_date": "13/09/2026 14:02",
-    "results": [
-        {
-            "test_code": "HBA1C",
-            "raw_name": "Glycosylated Haemoglobin (HbA1c)",
-            "value_text": "7.2",
-            "unit": "%",
-            "ref_text": "4.0 - 5.6",
-        },
-        {
-            "test_code": "HB",
-            "raw_name": "Haemoglobin",
-            "value_text": "12.1",
-            "unit": "g/dL",
-            "ref_text": "12.0 - 15.0",
-        },
-    ],
-}
-EMPTY_REPLY = {
-    **dict.fromkeys(["patient_name", "age", "sex", "lab_name", "sample_date", "report_date"]),
-    "results": [],
-}
-
-
-class FakeGemma:
-    """Stands in for gemma.extract_results and gemma.transcribe.
-
-    Page 1 gets `first`; other pages get an empty reply.
-    """
-
-    def __init__(self, first=GOOD_REPLY):
-        self.first, self.pages, self.transcribed = first, [], []
-
-    def ask(self, page, model, retry=False):
-        self.pages.append(page)
-        return PageExtraction.model_validate(self.first if page.number == 1 else EMPTY_REPLY)
-
-    def transcribe(self, page, model):
-        self.transcribed.append(page.number)
-        return f"transcription of page {page.number}"
-
-
-@pytest.fixture
-def use_gemma(monkeypatch):
-    def install(fake):
-        monkeypatch.setattr(gemma, "extract_results", fake.ask)
-        monkeypatch.setattr(gemma, "transcribe", fake.transcribe)
-        return fake
-
-    return install
-
-
-@pytest.fixture
-def fake_gemma(use_gemma):
-    return use_gemma(FakeGemma())
 
 
 def query(sql, *args):

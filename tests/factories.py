@@ -5,7 +5,7 @@ from itertools import count
 
 from arogya_vahi import db
 from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.models import PrintedPerson, ReportRecord, Result, SavedResult, TimelinePoint
+from arogya_vahi.models import PageExtraction, PrintedPerson, ReportRecord, Result, SavedResult, TimelinePoint
 
 _ids = count(1)
 
@@ -104,3 +104,53 @@ def saved_report(conn, sha256: str = "abc123", results=None, **record_fields) ->
     """Save a report (one verified HbA1c result unless `results` says otherwise); returns its id."""
     record = report_record(sha256=sha256, file_path=f"{sha256}.pdf", **record_fields)
     return db.save_report(conn, record, [saved_result()] if results is None else list(results))
+
+
+# ---------------------------------------------------------------- a stand-in for Gemma
+
+GOOD_REPLY = {
+    "patient_name": "Mrs. Sunita Patil",
+    "age": "62 Y",
+    "sex": "F",
+    "lab_name": "SUNRISE DIAGNOSTICS",
+    "sample_date": "12/09/2026 08:10",
+    "report_date": "13/09/2026 14:02",
+    "results": [
+        {
+            "test_code": "HBA1C",
+            "raw_name": "Glycosylated Haemoglobin (HbA1c)",
+            "value_text": "7.2",
+            "unit": "%",
+            "ref_text": "4.0 - 5.6",
+        },
+        {
+            "test_code": "HB",
+            "raw_name": "Haemoglobin",
+            "value_text": "12.1",
+            "unit": "g/dL",
+            "ref_text": "12.0 - 15.0",
+        },
+    ],
+}
+EMPTY_REPLY = {
+    **dict.fromkeys(["patient_name", "age", "sex", "lab_name", "sample_date", "report_date"]),
+    "results": [],
+}
+
+
+class FakeGemma:
+    """Stands in for gemma.extract_results and gemma.transcribe.
+
+    Page 1 gets `first`; other pages get an empty reply.
+    """
+
+    def __init__(self, first=GOOD_REPLY):
+        self.first, self.pages, self.transcribed = first, [], []
+
+    def ask(self, page, model, retry=False):
+        self.pages.append(page)
+        return PageExtraction.model_validate(self.first if page.number == 1 else EMPTY_REPLY)
+
+    def transcribe(self, page, model):
+        self.transcribed.append(page.number)
+        return f"transcription of page {page.number}"

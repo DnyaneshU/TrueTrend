@@ -36,9 +36,10 @@ arogya-patients                          # who each report is for
 arogya-patients merge 1 3                # patients #1 and #3 are the same person
 arogya-patients assign 7 2               # report #7 is patient #2's ("new": someone new)
 arogya-recheck                           # re-verify everything saved, without calling Gemma
+arogya-serve                             # the web server and its API, on this computer
 ```
 
-Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck>`, and each has
+Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck|server>`, and each has
 `--help`. Progress and warnings go to the terminal; JSON goes to standard output.
 
 - `arogya-extract --force` reads a report that is already saved again; `--model
@@ -46,6 +47,33 @@ Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck>`,
 - Run `arogya-recheck` after editing the catalog (names, units, believable limits) or
   after updating the app. It also matches reports saved before patient matching existed
   (so do `arogya-summary` and `arogya-patients`).
+
+## The web server
+
+`arogya-serve` runs the API on `http://127.0.0.1:8000`, on this computer only. Sent files
+wait in a queue, and one background worker reads them with Gemma, one at a time, in the
+order they came (each takes minutes and the whole GPU). The queue is kept in the database,
+so files left half-read by a stop are read again on the next start. A phone reaches the
+server through [Tailscale](https://tailscale.com): `tailscale serve 8000` adds HTTPS and
+lets in only the family's own devices.
+
+| Request | What it does |
+|---|---|
+| `POST /api/uploads` (files) | Queue PDFs or photos of reports; a photo becomes a one-page PDF, and a file sent twice is read once |
+| `GET /api/uploads` | The latest uploads and how reading each went |
+| `POST /share-target` (files) | The same, for a report shared from WhatsApp; returns to the app |
+| `GET /api/summary?patient=N` | The Marathi summary (the latest report's patient by default) |
+| `GET /api/timelines?patient=N` | Every test's results, oldest first, with each change judged |
+| `GET /api/reports/{id}/original` | The original PDF; add `#page=N` to open it at a page |
+| `GET /api/questions?patient=N` | What waits for a person: values to check, same-named patients, reports that could be two patients, likely duplicates |
+| `POST /api/results/{id}/review` | `{"decision": "verified" \| "rejected"}`: a person compared the value with the original |
+| `GET /api/patients` | Every patient and their reports |
+| `POST /api/patients/merge` | `{"keep": 1, "other": 3}`: two patients are one person |
+| `PUT /api/reports/{id}/patient` | `{"patient_id": 2}`, or `null` for someone new |
+| `DELETE /api/reports/{id}` | Delete a report sent twice (its stored original is kept) |
+
+A person's decision on a value outranks the code's: `arogya-recheck` never undoes it.
+`/docs` describes every request.
 
 ## How it works
 
@@ -187,7 +215,8 @@ Linux, and installs the built wheel in a clean environment to check that it runs
 | `change.py` | Real change or normal variation, by the Reference Change Value |
 | `summary.py` | The Marathi summary and doctor questions (the `arogya-summary` command) |
 | `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
+| `server.py`, `ingest.py`, `jobs.py` | The web server and its API; files people send; the worker that reads them |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |
-| `models.py`, `config.py`, `resources.py`, `console.py`, `errors.py` | Data models, settings, packaged files, console output, user-facing errors |
+| `models.py`, `config.py`, `resources.py`, `files.py`, `console.py`, `errors.py` | Data models, settings, packaged files, whole-file writes, console output, user-facing errors |

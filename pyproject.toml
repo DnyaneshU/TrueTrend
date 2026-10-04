@@ -30,6 +30,9 @@ dependencies = [
     "pydantic-settings>=2.15,<3",
     "python-dateutil>=2.9.0,<3",
     "platformdirs>=4.3,<5",
+    "fastapi>=0.142,<1",
+    "uvicorn>=0.54,<1",
+    "python-multipart>=0.0.32,<1",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +41,7 @@ dev = [
     "hypothesis>=6.168,<7",
     "ruff>=0.16,<0.17",
     "build>=1.2,<2",
+    "httpx2>=2.13,<3",   # the API test client
 ]
 
 [project.urls]
@@ -48,6 +52,7 @@ arogya-extract = "arogya_vahi.extract:main"
 arogya-patients = "arogya_vahi.patients:main"
 arogya-recheck = "arogya_vahi.recheck:main"
 arogya-summary = "arogya_vahi.summary:main"
+arogya-serve = "arogya_vahi.server:main"
 
 [tool.setuptools.packages.find]
 include = ["arogya_vahi*"]

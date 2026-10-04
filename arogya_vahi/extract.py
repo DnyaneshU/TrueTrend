@@ -14,11 +14,9 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import re
 import sqlite3
 import sys
-import tempfile
 import time
 from contextlib import closing
 from datetime import date
@@ -28,6 +26,7 @@ from arogya_vahi import cli, db, gemma, patients
 from arogya_vahi.config import settings
 from arogya_vahi.dates import parse_date
 from arogya_vahi.errors import UserError
+from arogya_vahi.files import write_whole
 from arogya_vahi.models import Extraction, PageInput, ReportOutput, ReportRecord, SavedResult
 from arogya_vahi.pages import open_pdf, read_pages
 from arogya_vahi.pipeline import DATE_FIELDS, extract_pages
@@ -44,27 +43,28 @@ def run(
     force: bool = False,
     db_path: Path | None = None,
     originals_dir: Path | None = None,
+    name: str | None = None,
 ) -> ReportOutput | None:
     """Extract one report PDF, save it, and return what was saved.
 
     Returns None, saving nothing, when the same file was already extracted and force
     is False. Raises UserError for problems the user can fix. Nothing is written to
-    the database until every page has been read.
+    the database until every page has been read. `name` is how progress names the file
+    (by default its file name).
     """
     model = model or settings.model
+    name = name or pdf_path.name
     data = _read(pdf_path)
     sha256 = hashlib.sha256(data).hexdigest()
     with open_pdf(pdf_path, data) as doc:
         if not force and (existing := _saved_report_id(sha256, db_path)) is not None:
-            logger.info(
-                "%s was already extracted as report #%d. Use --force to redo it.", pdf_path.name, existing
-            )
+            logger.info("%s was already extracted as report #%d. Use --force to redo it.", name, existing)
             return None
         stored = _store_original(data, sha256, originals_dir or settings.originals_dir)
         pages = read_pages(doc)
         logger.info(
             "Reading %s: %s with %s. The first page also loads the model, so it takes longer.",
-            pdf_path.name, plural(len(pages), "page"), model,
+            name, plural(len(pages), "page"), model,
         )  # fmt: skip
         started = time.perf_counter()
         extraction = extract_pages(
@@ -224,25 +224,12 @@ def _save(
 def _store_original(data: bytes, sha256: str, originals_dir: Path) -> Path:
     """Keep a copy of the PDF named by its content, so the same file is stored once.
 
-    Written to a temporary file first and then renamed, so a crash never leaves a
-    half-written original; an existing copy is trusted only if its content matches.
+    Written whole or not at all; an existing copy is trusted only if its content matches.
     """
-    originals_dir.mkdir(parents=True, exist_ok=True)
     stored = originals_dir / f"{sha256}.pdf"
     if stored.is_file() and hashlib.sha256(stored.read_bytes()).hexdigest() == sha256:
         return stored
-    with tempfile.NamedTemporaryFile(dir=originals_dir, suffix=".part", delete=False) as part:
-        part.write(data)
-        part.flush()
-        os.fsync(part.fileno())
-    try:
-        os.replace(part.name, stored)
-    except PermissionError:
-        raise UserError(
-            f"The stored copy {stored.name} is open in another program; close it and try again."
-        ) from None
-    finally:
-        Path(part.name).unlink(missing_ok=True)
+    write_whole(stored, data)
     return stored
 
 

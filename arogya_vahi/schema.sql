@@ -47,9 +47,24 @@ CREATE TABLE IF NOT EXISTS results (
     ref_verified    INTEGER NOT NULL DEFAULT 0 CHECK (ref_verified IN (0, 1)),
     status          TEXT NOT NULL DEFAULT 'needs_check'
                     CHECK (status IN ('verified', 'needs_check', 'rejected')),
-    check_notes     TEXT
+    check_notes     TEXT,
+    reviewed        TEXT CHECK (reviewed IN ('verified', 'rejected'))  -- a person's decision; outranks status
+);
+
+-- Files waiting to be read, being read, or read: one worker reads them one at a time.
+CREATE TABLE IF NOT EXISTS uploads (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_name   TEXT NOT NULL,                -- as sent
+    sha256      TEXT NOT NULL,                -- of the bytes sent
+    status      TEXT NOT NULL DEFAULT 'queued'
+                CHECK (status IN ('queued', 'reading', 'saved', 'already_saved', 'failed')),
+    message     TEXT,                         -- warnings, or why it failed
+    report_id   INTEGER REFERENCES reports(id) ON DELETE SET NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    updated_at  TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_report ON results(report_id);
 CREATE INDEX IF NOT EXISTS idx_results_test ON results(test_code);
 CREATE INDEX IF NOT EXISTS idx_reports_patient ON reports(patient_id);
+CREATE INDEX IF NOT EXISTS idx_uploads_status ON uploads(status);
