@@ -5,14 +5,14 @@
 // Every page describes something the app actually does -- a tour that promises a
 // feature which does not exist would be worse than no tour at all.
 
-import { $, el, fill, icon, show } from "./dom.js";
+import { $, el, fill, icon, show, tag } from "./dom.js";
 
 const SEEN = "arogya.guide.seen.v1";
 
 /** One page of the guide: a mark, a title, and what the reader needs to know. */
 const PAGES = [
   {
-    art: ["mark", 54],
+    art: "summary",
     step: "1 of 5",
     title: "Every report in one place",
     body: [
@@ -21,7 +21,7 @@ const PAGES = [
     ],
   },
   {
-    art: ["shield", 48],
+    art: "shield",
     step: "2 of 5",
     title: "Every number comes from the report",
     body: [
@@ -30,7 +30,7 @@ const PAGES = [
     ],
   },
   {
-    art: ["chart", 48],
+    art: "chart",
     step: "3 of 5",
     title: "A real change, or normal variation?",
     body: [
@@ -38,27 +38,27 @@ const PAGES = [
       "So a small difference does not become a worry, and a real one is not missed.",
     ],
     legend: [
-      ["badge--up", "Real increase", "larger than the normal movement for this test"],
-      ["badge--down", "Real decrease", "the value has genuinely come down"],
-      ["badge--flat", "Normal variation", "within what this test moves anyway"],
-      ["badge--check", "Needs checking", "waiting for you to confirm"],
+      ["up", "Real increase", "larger than the normal movement for this test"],
+      ["down", "Real decrease", "the value has genuinely come down"],
+      ["flat", "Normal variation", "within what this test moves anyway"],
+      ["warn", "Needs checking", "waiting for you to confirm"],
     ],
   },
   {
-    art: ["home", 48],
+    art: "people",
     step: "4 of 5",
-    title: "The five buttons",
-    body: ["The five buttons along the bottom, and what each one is for:"],
+    title: "The five sections",
+    body: ["The five sections along the top, and what each one is for:"],
     keys: [
-      ["home", "Summary", "what changed in the latest report, and what to ask the doctor"],
+      ["summary", "Summary", "what changed in the latest report, and what to ask the doctor"],
       ["plus", "Add", "send a new report from the phone"],
       ["chart", "Changes", "one test's chart — tap a point to see it in the original report"],
-      ["ask", "Check", "values the app could not verify on its own"],
+      ["check-circle", "Check", "values the app could not verify on its own"],
       ["people", "People", "which report belongs to whom"],
     ],
   },
   {
-    art: ["speak", 48],
+    art: "speak",
     step: "5 of 5",
     title: "The summary is spoken in Marathi",
     body: [
@@ -74,7 +74,7 @@ const keyRow = ([iconName, name, what]) =>
 
 /** A row of the colour legend: the badge as it really looks, and what it means. */
 const legendRow = ([kind, text, what]) =>
-  el("li", el("span.key", el(`span.badge.${kind}`, text)), el("span", what));
+  el("li", el("span.key", tag(text, kind)), el("span", what));
 
 export function openGuide(onDone) {
   const tour = $("tour");
@@ -82,8 +82,7 @@ export function openGuide(onDone) {
 
   function draw() {
     const page = PAGES[at];
-    const [artIcon, artSize] = page.art;
-    fill($("tour-art"), icon(artIcon, artSize));
+    $("tour-icon").firstChild.setAttribute("href", `#i-${page.art}`);
     $("tour-step").textContent = page.step;
     $("tour-h").textContent = page.title;
 

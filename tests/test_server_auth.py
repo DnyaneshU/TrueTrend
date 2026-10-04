@@ -199,7 +199,7 @@ def test_the_website_loads_nothing_from_the_internet(client):
 
 
 def test_the_app_is_one_module_per_job(client):
-    for module in ("api.js", "text.js", "dom.js", "chart.js", "guide.js"):
+    for module in ("api.js", "text.js", "dom.js", "chart.js", "guide.js", "voice.js"):
         assert client.get(f"/{module}").status_code == 200
 
 

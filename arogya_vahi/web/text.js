@@ -58,10 +58,10 @@ export function shortDay(iso) {
 
 /** What each kind of change is called, and which colour says it. */
 export const CHANGE = {
-  real_increase: { text: "Real increase", tone: "up", badge: "badge--up" },
-  real_decrease: { text: "Real decrease", tone: "down", badge: "badge--down" },
-  within_normal_variation: { text: "Normal variation", tone: "flat", badge: "badge--flat" },
-  not_judged: { text: "Not compared", tone: "flat", badge: "" },
+  real_increase: { text: "Real increase", tone: "up", tag: "up" },
+  real_decrease: { text: "Real decrease", tone: "down", tag: "down" },
+  within_normal_variation: { text: "Normal variation", tone: "flat", tag: "flat" },
+  not_judged: { text: "Not compared", tone: "flat", tag: "" },
 };
 
 /** The server sends the sentence; this only picks the colour that matches what it says. */
@@ -88,7 +88,7 @@ export const T = {
   failed: "Could not be read",
 
   // buttons
-  listen: "Listen",
+  listen: "Listen in Marathi",
   stop: "Stop",
   yes: "Yes, that is right",
   no: "No, that is wrong",
@@ -106,7 +106,11 @@ export const T = {
   firstReport: "First report",
 
   // voice
-  noVoice: "This device has no Marathi voice, so the summary cannot be read aloud.",
+  noVoice: "This device has no Marathi voice installed.",
+  installVoice:
+    "Windows: Settings → Time & language → Language & region → Add a language " +
+    "→ मराठी (Marathi), with Speech ticked. " +
+    "iPhone and Android have Marathi voices already. Nothing is sent anywhere either way.",
 
   // things said about the data
   reportsSuffix: (n) => `${n} report${n === 1 ? "" : "s"}`,

@@ -7,17 +7,18 @@
 import * as t from "./text.js";
 
 const INK = {
-  line: "#22e0d6",
-  lineSoft: "#22e0d61a",
-  check: "#ffb340",
-  band: "#9cff5712",
-  bandEdge: "#9cff5730",
-  grid: "#ffffff0d",
-  text: "#a7abc8",
+  line: "#35c6c0",
+  lineSoft: "#35c6c016",
+  check: "#d9a441",
+  band: "#ffffff07",
+  bandEdge: "#ffffff22",
+  grid: "#ffffff0c",
+  text: "#9aa3b2",
 };
 
-Chart.defaults.font.family = '"Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
-Chart.defaults.font.size = 12;
+Chart.defaults.font.family =
+  'ui-sans-serif, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+Chart.defaults.font.size = 11;
 Chart.defaults.color = INK.text;
 
 /** The lab's normal range, drawn as a band behind the line when every report agrees on it. */
@@ -104,8 +105,8 @@ export function drawTimeline(canvas, timeline, onPick) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: "#0c0d18f2",
-          borderColor: "#272b47",
+          backgroundColor: "#12151bf5",
+          borderColor: "#242a34",
           borderWidth: 1,
           padding: 11,
           displayColors: false,

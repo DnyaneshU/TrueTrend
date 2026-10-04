@@ -1,69 +1,60 @@
 /* Arogya Vahi — the look.
  *
- * Dark, with light that comes from the data itself: a value in range glows cyan, one
- * outside it amber, a real change magenta. Nothing glows that doesn't mean something,
- * so the glow reads as information rather than decoration.
+ * A medical instrument, not a toy. Flat dark panels, hairline rules, one accent colour
+ * used only where it carries meaning, and type doing most of the work. Corners are
+ * rounded, but nothing glows for its own sake: the only lit things on a screen are a
+ * value out of range, a change that is real, and the control under your finger.
  *
- * Built for a 60-something reader holding a phone: 19px body text, 52px tap targets,
- * and Marathi set in a face that has the conjuncts (Noto Sans Devanagari, with the
- * system's own Devanagari behind it so it still reads with no font file at all).
+ * Built for a 60-something reader on a phone: 17px base, numbers set in a tabular face
+ * so columns line up, and nothing she must tap smaller than 48px.
  */
 
 /* ---------------------------------------------------------------- tokens */
 
 :root {
-  /* The dark the neon sits on. Not black: three steps of near-black keep depth. */
-  --ink-900: #07070d;
-  --ink-800: #0c0d18;
-  --ink-700: #121426;
-  --ink-600: #1a1d33;
-  --ink-500: #272b47;
+  /* Surfaces: four steps, flat, no gradients. */
+  --bg: #0b0d11;
+  --panel: #12151b;
+  --panel-2: #171b22;
+  --line: #242a34;
+  --line-soft: #1b2027;
 
-  /* The neon. Each has a dim form for borders and a glow form for shadows. */
-  --cyan: #22e0d6;
-  --cyan-dim: #176e6e;
-  --cyan-glow: #22e0d655;
-  --magenta: #ff3d9a;
-  --magenta-dim: #8a1f54;
-  --magenta-glow: #ff3d9a55;
-  --violet: #9d6bff;
-  --violet-dim: #4d3685;
-  --violet-glow: #9d6bff55;
-  --amber: #ffb340;
-  --amber-dim: #8a6020;
-  --amber-glow: #ffb34055;
-  --lime: #9cff57;
-  --lime-dim: #4e8a2b;
+  /* Text */
+  --text: #e8ecf2;
+  --text-2: #9aa3b2;
+  --text-3: #626c7d;
 
-  --text: #eef0fb;
-  --text-soft: #a7abc8;
-  --text-faint: #6f7495;
+  /* Meaning. Each colour appears only where it says something. */
+  --accent: #35c6c0; /* the app's own colour: the current thing, the primary action */
+  --accent-ink: #06201f; /* text on the accent */
+  --up: #e8577f; /* a real increase */
+  --down: #4aa8ff; /* a real decrease */
+  --flat: #6f7b8c; /* within normal variation: deliberately quiet */
+  --warn: #d9a441; /* out of the lab's range, or waiting for a person */
 
-  /* One ramp of space, so nothing is spaced by accident. */
+  /* Space: one ramp, so nothing is spaced by accident. */
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
   --s4: 16px;
-  --s5: 24px;
+  --s5: 22px;
   --s6: 32px;
-  --s7: 48px;
+  --s7: 44px;
 
-  --r-sm: 10px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --r-pill: 999px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
 
-  --tap: 52px; /* nothing she must tap is smaller than this */
-  --read: 34rem; /* a column that stays readable on a laptop */
+  --tap: 48px;
 
-  --font: "Noto Sans Devanagari", "Nirmala UI", "Noto Sans", -apple-system,
-    BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-num: "DM Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mr: "Noto Sans Devanagari", "Nirmala UI", var(--font);
+  --font-num: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
 
-  --ease: cubic-bezier(0.22, 0.75, 0.3, 1);
+  --ease: cubic-bezier(0.2, 0.6, 0.3, 1);
 }
 
-/* Respect a reader who has asked for less motion: the glow stays, the movement goes. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -71,7 +62,6 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
 }
 
@@ -82,181 +72,259 @@
 }
 
 html {
-  -webkit-text-size-adjust: 100%; /* iOS must not resize text when the phone turns */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  min-height: 100dvh; /* iOS: the real height, under the toolbars */
-  background: var(--ink-900);
+  min-height: 100dvh;
+  background: var(--bg);
   color: var(--text);
-  font: 400 19px/1.65 var(--font);
+  font: 400 17px/1.6 var(--font);
+  font-feature-settings: "tnum" 1; /* figures line up in a column */
   overflow-x: hidden;
-  /* The light in the room: two coloured pools behind everything, fixed so they don't
-   * scroll away. They are the only purely decorative light on the page. */
-  background-image: radial-gradient(
-      ellipse 80% 55% at 12% -8%,
-      #22e0d61f,
-      transparent 60%
-    ),
-    radial-gradient(ellipse 70% 50% at 92% 4%, #ff3d9a1a, transparent 62%),
-    radial-gradient(ellipse 90% 60% at 50% 102%, #9d6bff14, transparent 65%);
-  background-attachment: fixed;
 }
 
-/* The faint grid that makes the dark feel like a surface, not a void. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: linear-gradient(#ffffff06 1px, transparent 1px),
-    linear-gradient(90deg, #ffffff06 1px, transparent 1px);
-  background-size: 46px 46px;
-  mask-image: radial-gradient(ellipse 120% 80% at 50% 0%, #000 20%, transparent 75%);
+/* Marathi needs its own face for the conjuncts, and a little more line height. */
+[lang="mr"] {
+  font-family: var(--font-mr);
+  line-height: 1.75;
 }
 
-/* ---------------------------------------------------------------- shell */
+/* ---------------------------------------------------------------- app frame */
 
-.shell {
-  position: relative;
-  z-index: 1;
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 0 var(--s4) calc(var(--tap) + var(--s7) + env(safe-area-inset-bottom));
+/* The app is one page: a fixed header with the navigation, and the screen below it. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
 }
 
-/* ---------------------------------------------------------------- masthead */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding-top: env(safe-area-inset-top);
+}
 
-.masthead {
+.topbar-row {
   display: flex;
   align-items: center;
   gap: var(--s3);
-  padding: calc(var(--s4) + env(safe-area-inset-top)) 0 var(--s4);
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: var(--s3) var(--s4);
 }
 
-.mark {
-  flex: none;
-  width: 42px;
-  height: 42px;
-}
-
-.wordmark {
-  flex: 1;
-  min-width: 0;
-}
-
-.wordmark b {
-  display: block;
-  font-size: 1.22rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-}
-
-.wordmark span {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--text-faint);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-/* The claim the whole project rests on, shown where she can see it holds. */
-.vow {
+.brand {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  margin: 0 0 var(--s5);
-  padding: var(--s3) var(--s4);
-  border: 1px solid var(--cyan-dim);
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, #22e0d614, transparent);
-  color: var(--cyan);
-  font-size: 0.86rem;
-  line-height: 1.4;
+  min-width: 0;
+  font-size: 0.94rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
-.vow svg {
+.brand svg {
   flex: none;
+  color: var(--accent);
 }
 
-/* ---------------------------------------------------------------- cards */
+/* Who the reports belong to, and who is signed in: the live session, stated plainly. */
+.session {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 0.82rem;
+}
 
-.card {
+.session b {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session .sep {
+  color: var(--text-3);
+}
+
+/* The navigation: a row of tabs under the brand, scrollable on a narrow phone. */
+.nav {
+  display: flex;
+  gap: var(--s1);
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 0 var(--s3) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
   position: relative;
-  margin: 0 0 var(--s4);
-  padding: var(--s5);
-  border: 1px solid var(--ink-500);
-  border-radius: var(--r-lg);
-  background: linear-gradient(170deg, var(--ink-700), var(--ink-800));
-  box-shadow: 0 1px 0 #ffffff0a inset, 0 18px 40px -24px #000c;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  background: none;
+  color: var(--text-2);
+  font: 600 0.88rem/1 var(--font);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: color 0.15s var(--ease);
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* A hairline of colour along the top edge: the card's subject, at a glance. */
-.card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12%;
-  right: 12%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--edge, var(--violet)), transparent);
+.tab svg {
+  width: 17px;
+  height: 17px;
   opacity: 0.85;
 }
 
-.card--cyan {
-  --edge: var(--cyan);
-}
-.card--magenta {
-  --edge: var(--magenta);
-}
-.card--amber {
-  --edge: var(--amber);
+.tab:hover {
+  color: var(--text);
 }
 
-.card > :first-child {
+.tab[aria-selected="true"] {
+  color: var(--text);
+}
+
+/* A 2px rule under the tab you are on: the only "lit" thing in the chrome. */
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: var(--s2);
+  right: var(--s2);
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+/* A count on a tab that is waiting for you. */
+.tab .count {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--warn);
+  color: #221902;
+  font: 700 0.7rem/19px var(--font-num);
+  text-align: center;
+}
+
+.tab .count[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- page */
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: var(--s5) var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
+}
+
+.screen[hidden] {
+  display: none;
+}
+
+/* ---------------------------------------------------------------- panels */
+
+.panel {
+  margin: 0 0 var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5) 0;
+}
+
+.panel-head h1,
+.panel-head h2 {
+  margin: 0;
+  font-size: 1.16rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+
+.panel-head .meta {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.panel-body {
+  padding: var(--s4) var(--s5) var(--s5);
+}
+
+.panel-body > :first-child {
   margin-top: 0;
 }
-.card > :last-child {
+
+.panel-body > :last-child {
   margin-bottom: 0;
 }
 
-h1 {
-  margin: 0 0 var(--s4);
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-h2 {
-  margin: 0 0 var(--s3);
-  font-size: 1.12rem;
-  font-weight: 600;
-  line-height: 1.35;
+.lede {
+  margin: var(--s1) 0 0;
+  color: var(--text-2);
+  font-size: 0.9rem;
 }
 
 .eyebrow {
-  margin: 0 0 var(--s2);
-  color: var(--text-faint);
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  margin: 0 0 var(--s1);
+  color: var(--text-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .muted {
-  color: var(--text-soft);
+  color: var(--text-2);
 }
 
 .small {
   font-size: 0.86rem;
-  line-height: 1.5;
 }
 
-/* ---------------------------------------------------------------- buttons */
+.rule {
+  height: 1px;
+  margin: var(--s4) 0;
+  border: 0;
+  background: var(--line-soft);
+}
+
+/* ---------------------------------------------------------------- controls */
 
 .btn {
   display: inline-flex;
@@ -264,79 +332,80 @@ h2 {
   justify-content: center;
   gap: var(--s2);
   min-height: var(--tap);
-  padding: 0 var(--s5);
-  border: 1px solid var(--ink-500);
-  border-radius: var(--r-pill);
-  background: var(--ink-600);
+  padding: 0 var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel-2);
   color: var(--text);
-  font: 600 1rem/1 var(--font);
+  font: 600 0.94rem/1 var(--font);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
-  transition: transform 0.15s var(--ease), box-shadow 0.2s var(--ease),
-    border-color 0.2s var(--ease), background 0.2s var(--ease);
+  transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
 .btn:hover:not(:disabled) {
-  border-color: var(--violet-dim);
-  background: var(--ink-500);
+  border-color: #313846;
+  background: #1c212a;
 }
 
 .btn:active:not(:disabled) {
-  transform: translateY(1px);
+  background: #161b23;
 }
 
 .btn:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-/* The one button on a screen that she is meant to press. */
-.btn--go {
+/* The one action a screen is for. Flat accent, no gradient. */
+.btn--primary {
   border-color: transparent;
-  background: linear-gradient(135deg, var(--cyan), #3bd0ff 55%, var(--violet));
-  color: #04121a;
+  background: var(--accent);
+  color: var(--accent-ink);
   font-weight: 700;
-  box-shadow: 0 0 0 1px #22e0d655, 0 10px 30px -12px var(--cyan-glow);
 }
 
-.btn--go:hover:not(:disabled) {
-  background: linear-gradient(135deg, #3ef0e6, #58d8ff 55%, #ad80ff);
-  box-shadow: 0 0 0 1px #22e0d688, 0 14px 38px -12px var(--cyan-glow);
+.btn--primary:hover:not(:disabled) {
+  background: #45d6d0;
 }
 
-.btn--speak {
-  border-color: var(--magenta-dim);
-  background: linear-gradient(135deg, #ff3d9a22, #9d6bff1a);
-  color: var(--magenta);
-  box-shadow: 0 8px 26px -16px var(--magenta-glow);
-}
-
-.btn--speak[aria-pressed="true"] {
-  border-color: var(--magenta);
-  box-shadow: 0 0 0 1px var(--magenta), 0 10px 30px -12px var(--magenta-glow);
-}
-
-.btn--quiet {
-  background: transparent;
-  color: var(--text-soft);
-  font-weight: 500;
+.btn--primary:active:not(:disabled) {
+  background: #2fb3ad;
 }
 
 .btn--wide {
   width: 100%;
 }
 
+.btn--quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--text-2);
+  font-weight: 500;
+}
+
+.btn--quiet:hover:not(:disabled) {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.btn--sm {
+  min-height: 38px;
+  padding: 0 var(--s3);
+  font-size: 0.85rem;
+}
+
 .btn--yes {
-  border-color: var(--lime-dim);
-  color: var(--lime);
+  border-color: #2b4a3a;
+  color: #63d898;
 }
 
 .btn--no {
-  border-color: var(--amber-dim);
-  color: var(--amber);
+  border-color: #4a2b36;
+  color: #e8577f;
 }
 
 .btn-row {
@@ -345,17 +414,18 @@ h2 {
   gap: var(--s2);
 }
 
-.btn-row > .btn {
-  flex: 1 1 auto;
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---------------------------------------------------------------- forms */
 
 label {
   display: block;
-  margin-bottom: var(--s1);
-  color: var(--text-soft);
-  font-size: 0.88rem;
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
@@ -364,28 +434,23 @@ input[type="password"] {
   width: 100%;
   min-height: var(--tap);
   margin-bottom: var(--s4);
-  padding: 0 var(--s4);
-  border: 1px solid var(--ink-500);
-  border-radius: var(--r-sm);
-  background: var(--ink-900);
+  padding: 0 var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: #0e1116;
   color: var(--text);
-  font: 400 1.06rem/1 var(--font);
+  font: 400 1rem/1 var(--font);
 }
 
-input:focus-visible,
-.btn:focus-visible,
-summary:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 2px;
+input:focus {
+  border-color: var(--accent);
+  outline: none;
 }
 
 input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-3);
 }
 
-/* The file input is replaced by a label styled as the main button: a bare
- * <input type=file> is unreadable on a phone and unstyleable in Safari. */
 .file-pick {
   position: absolute;
   width: 1px;
@@ -398,118 +463,27 @@ input::placeholder {
   border: 0;
 }
 
-/* ---------------------------------------------------------------- tab bar */
-
-.tabs {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  display: flex;
-  padding: var(--s1) var(--s2) calc(var(--s1) + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--ink-500);
-  background: #0a0b14ee;
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-}
-
-.tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  min-height: var(--tap);
-  padding: var(--s2) 0 var(--s1);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: none;
-  color: var(--text-faint);
-  font: 600 0.69rem/1.2 var(--font);
-  cursor: pointer;
-  transition: color 0.2s var(--ease);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.tab svg {
-  width: 23px;
-  height: 23px;
-}
-
-.tab[aria-selected="true"] {
-  color: var(--cyan);
-  text-shadow: 0 0 14px var(--cyan-glow);
-}
-
-/* The lit bar over the tab she is on. */
-.tab[aria-selected="true"]::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: 30px;
-  height: 2px;
-  border-radius: var(--r-pill);
-  background: var(--cyan);
-  box-shadow: 0 0 10px var(--cyan);
-}
-
-/* A dot on a tab that is waiting for her. */
-.tab .dot {
-  position: absolute;
-  top: 8px;
-  margin-left: 22px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--magenta);
-  box-shadow: 0 0 8px var(--magenta);
-}
-
-.tab .dot[hidden] {
-  display: none;
-}
-
-/* ---------------------------------------------------------------- screens */
-
-.screen[hidden] {
-  display: none;
-}
-
-.screen {
-  animation: rise 0.32s var(--ease) both;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
-
 /* ---------------------------------------------------------------- findings */
 
-/* What the summary says, one sentence per line, each marked by what it means. */
+/* What the summary says: a test, its reading, and the sentence about it. */
 .finding {
-  display: flex;
-  gap: var(--s3);
+  display: grid;
+  grid-template-columns: 3px 1fr;
+  gap: var(--s4);
   padding: var(--s4) 0;
-  border-top: 1px solid var(--ink-600);
+  border-top: 1px solid var(--line-soft);
 }
 
-.finding:first-of-type {
+.finding:first-child {
   border-top: 0;
   padding-top: 0;
 }
 
-.finding .pip {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  margin-top: 0.55em;
-  border-radius: 50%;
-  background: var(--tone, var(--violet));
-  box-shadow: 0 0 10px var(--tone, var(--violet));
+/* The one lit element: a bar in the colour of what the sentence says. */
+.finding::before {
+  content: "";
+  border-radius: 2px;
+  background: var(--tone, var(--flat));
 }
 
 .finding p {
@@ -517,21 +491,21 @@ input::placeholder {
 }
 
 .tone-up {
-  --tone: var(--magenta);
+  --tone: var(--up);
 }
 .tone-down {
-  --tone: var(--cyan);
+  --tone: var(--down);
 }
 .tone-out {
-  --tone: var(--amber);
+  --tone: var(--warn);
 }
 .tone-flat {
-  --tone: var(--lime);
+  --tone: var(--flat);
 }
 
-/* ---------------------------------------------------------------- test rows */
+/* ---------------------------------------------------------------- data rows */
 
-.test {
+.row {
   display: flex;
   align-items: center;
   gap: var(--s3);
@@ -539,118 +513,136 @@ input::placeholder {
   min-height: var(--tap);
   padding: var(--s3) 0;
   border: 0;
-  border-top: 1px solid var(--ink-600);
+  border-top: 1px solid var(--line-soft);
   background: none;
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
-.test:first-of-type {
+.row:first-child {
   border-top: 0;
 }
 
-.test-name {
-  flex: 1;
-  min-width: 0;
-  font-weight: 600;
+button.row {
+  cursor: pointer;
 }
 
-.test-sub {
+button.row:hover {
+  background: #141820;
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-name {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+.row-sub {
   display: block;
-  color: var(--text-faint);
-  font-size: 0.8rem;
+  color: var(--text-3);
+  font-size: 0.78rem;
   font-weight: 400;
 }
 
-.test-value {
+.row-value {
   flex: none;
-  font: 600 1.14rem/1 var(--font-num);
+  font: 600 1.02rem/1 var(--font-num);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
-.test-arrow {
+.row-end {
   flex: none;
-  color: var(--text-faint);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
 }
 
-/* ---------------------------------------------------------------- badges */
+/* ---------------------------------------------------------------- tags */
 
-.badge {
+/* A word for what something is. Only the ones that mean "look at this" get colour. */
+.tag {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 11px;
-  border: 1px solid var(--badge-dim, var(--ink-500));
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--badge, var(--text-faint)) 12%, transparent);
-  color: var(--badge, var(--text-soft));
-  font-size: 0.76rem;
+  padding: 2px 8px;
+  border: 1px solid var(--tag-line, var(--line));
+  border-radius: var(--r-sm);
+  color: var(--tag, var(--text-2));
+  font-size: 0.74rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
-.badge--ok {
-  --badge: var(--cyan);
-  --badge-dim: var(--cyan-dim);
+.tag--up {
+  --tag: var(--up);
+  --tag-line: #4a2b36;
 }
-.badge--check {
-  --badge: var(--amber);
-  --badge-dim: var(--amber-dim);
+.tag--down {
+  --tag: var(--down);
+  --tag-line: #23405e;
 }
-.badge--up {
-  --badge: var(--magenta);
-  --badge-dim: var(--magenta-dim);
+.tag--flat {
+  --tag: var(--flat);
+  --tag-line: var(--line);
 }
-.badge--down {
-  --badge: var(--cyan);
-  --badge-dim: var(--cyan-dim);
+.tag--warn {
+  --tag: var(--warn);
+  --tag-line: #4a3c1d;
 }
-.badge--flat {
-  --badge: var(--lime);
-  --badge-dim: var(--lime-dim);
+.tag--ok {
+  --tag: var(--accent);
+  --tag-line: #1d4745;
 }
 
 /* ---------------------------------------------------------------- chart */
 
 .chart-wrap {
   position: relative;
-  height: 230px;
-  margin: var(--s4) 0;
+  height: 240px;
+  margin: var(--s3) 0 var(--s5);
 }
 
 /* ---------------------------------------------------------------- queue */
 
-.queue-item {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  padding: var(--s3) 0;
-  border-top: 1px solid var(--ink-600);
-}
-
-.queue-item:first-of-type {
-  border-top: 0;
-}
-
-.queue-name {
-  flex: 1;
-  min-width: 0;
+.bar {
+  height: 2px;
+  margin-top: var(--s3);
+  border-radius: 2px;
+  background: var(--line);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.92rem;
 }
 
-/* A ring that turns while a report is being read. */
+.bar::after {
+  content: "";
+  display: block;
+  width: 30%;
+  height: 100%;
+  background: var(--accent);
+  animation: sweep 1.4s var(--ease) infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(430%);
+  }
+}
+
 .spinner {
   flex: none;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--violet-dim);
-  border-top-color: var(--violet);
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -661,141 +653,67 @@ input::placeholder {
   }
 }
 
-/* While Gemma reads a report, a bar that shows work is happening without
- * claiming to know how far along it is — because nothing here knows that. */
-.working {
-  height: 3px;
-  margin-top: var(--s3);
-  border-radius: var(--r-pill);
-  background: var(--ink-600);
-  overflow: hidden;
+/* ---------------------------------------------------------------- notes */
+
+.note {
+  margin: var(--s3) 0 0;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--note-line, var(--line));
+  border-left-width: 2px;
+  border-left-color: var(--note, var(--text-3));
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
-.working::after {
-  content: "";
-  display: block;
-  width: 36%;
-  height: 100%;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, transparent, var(--cyan), var(--violet), transparent);
-  animation: sweep 1.5s var(--ease) infinite;
+.note--warn {
+  --note: var(--warn);
 }
 
-@keyframes sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(380%);
-  }
+.note--bad {
+  --note: var(--up);
 }
 
-/* ---------------------------------------------------------------- the guide */
-
-/* The first-run tour: one card at a time over the app, like a game's controls screen. */
-.tour {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  display: grid;
-  place-items: center;
-  padding: var(--s4);
-  background: #04050bdd;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+.note .btn {
+  margin-top: var(--s2);
 }
 
-.tour[hidden] {
-  display: none;
-}
+/* ---------------------------------------------------------------- empty */
 
-.tour-card {
-  width: 100%;
-  max-width: 25rem;
-  max-height: 86dvh;
-  overflow-y: auto;
-  padding: var(--s5);
-  border: 1px solid var(--violet-dim);
-  border-radius: var(--r-lg);
-  background: linear-gradient(170deg, var(--ink-700), var(--ink-900));
-  box-shadow: 0 0 0 1px #9d6bff22, 0 30px 70px -30px #000, 0 0 70px -30px var(--violet-glow);
-  animation: rise 0.3s var(--ease) both;
-}
-
-.tour-art {
-  display: grid;
-  place-items: center;
-  height: 92px;
-  margin-bottom: var(--s4);
-  border-radius: var(--r-md);
-  background: radial-gradient(ellipse at 50% 120%, #9d6bff26, transparent 70%);
-}
-
-.tour-dots {
-  display: flex;
-  justify-content: center;
-  gap: 7px;
-  margin: var(--s5) 0 var(--s4);
-}
-
-.tour-dots i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ink-500);
-  transition: background 0.2s var(--ease), box-shadow 0.2s var(--ease);
-}
-
-.tour-dots i.on {
-  background: var(--cyan);
-  box-shadow: 0 0 9px var(--cyan);
-}
-
-/* The key-map table: what each thing on screen means. */
-.legend {
-  margin: var(--s4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.legend li {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s3);
-  padding: var(--s3) 0;
-  border-top: 1px solid var(--ink-600);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.legend li:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.legend .key {
-  flex: none;
-  min-width: 2.9rem;
+.empty {
+  padding: var(--s6) var(--s4);
+  color: var(--text-3);
   text-align: center;
 }
 
-/* ---------------------------------------------------------------- help */
+.empty svg {
+  margin-bottom: var(--s2);
+  opacity: 0.4;
+}
+
+.empty p {
+  margin: 0 0 var(--s1);
+}
+
+/* ---------------------------------------------------------------- disclosure */
 
 details {
   margin-top: var(--s4);
-  border: 1px solid var(--ink-500);
+  border: 1px solid var(--line);
   border-radius: var(--r-md);
-  background: var(--ink-800);
+  background: var(--panel-2);
 }
 
 summary {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  min-height: var(--tap);
+  min-height: 46px;
   padding: 0 var(--s4);
-  color: var(--cyan);
-  font-size: 0.92rem;
+  color: var(--text);
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -805,20 +723,24 @@ summary::-webkit-details-marker {
   display: none;
 }
 
+summary svg {
+  color: var(--text-3);
+}
+
 details[open] summary {
-  border-bottom: 1px solid var(--ink-600);
+  border-bottom: 1px solid var(--line);
 }
 
 .steps {
   margin: 0;
-  padding: var(--s4) var(--s4) var(--s4) calc(var(--s4) + 1.5rem);
-  color: var(--text-soft);
-  font-size: 0.94rem;
+  padding: var(--s4) var(--s4) var(--s4) calc(var(--s4) + 1.4rem);
+  color: var(--text-2);
+  font-size: 0.9rem;
   line-height: 1.7;
 }
 
 .steps li {
-  margin-bottom: var(--s2);
+  margin-bottom: 6px;
 }
 
 .steps li:last-child {
@@ -829,44 +751,50 @@ details[open] summary {
   color: var(--text);
 }
 
-/* ---------------------------------------------------------------- the page picture */
+/* ---------------------------------------------------------------- overlay */
 
-.sheet {
+.overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 60;
   display: flex;
   flex-direction: column;
-  background: #04050bf2;
+  background: color-mix(in srgb, var(--bg) 92%, #000);
 }
 
-.sheet[hidden] {
+.overlay[hidden] {
   display: none;
 }
 
-.sheet-bar {
+.overlay-bar {
   display: flex;
   align-items: center;
   gap: var(--s3);
   padding: calc(var(--s3) + env(safe-area-inset-top)) var(--s4) var(--s3);
-  border-bottom: 1px solid var(--ink-500);
-  background: var(--ink-800);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
 }
 
-.sheet-bar h2 {
+.overlay-bar h2 {
   flex: 1;
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.98rem;
+  font-weight: 650;
 }
 
-.sheet-body {
+.overlay-body {
   flex: 1;
   overflow: auto;
   padding: var(--s4);
   -webkit-overflow-scrolling: touch;
 }
 
-.sheet-body img {
+.overlay-body > .inner {
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.overlay-body img {
   display: block;
   width: 100%;
   height: auto;
@@ -874,43 +802,129 @@ details[open] summary {
   background: #fff; /* a report page is paper: show it as paper */
 }
 
-/* ---------------------------------------------------------------- misc */
+/* ---------------------------------------------------------------- guide */
 
-.empty {
-  padding: var(--s6) var(--s4);
-  color: var(--text-faint);
-  text-align: center;
+.guide {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--s4);
+  background: #05070ad9;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 
-.empty svg {
-  margin-bottom: var(--s3);
-  opacity: 0.5;
+.guide[hidden] {
+  display: none;
 }
 
-.note {
-  margin: var(--s3) 0 0;
-  padding: var(--s3) var(--s4);
-  border-left: 2px solid var(--amber);
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  background: #ffb34010;
-  color: var(--text-soft);
+.guide-card {
+  width: 100%;
+  max-width: 27rem;
+  max-height: 88dvh;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.guide-card .panel-body {
+  padding: var(--s5);
+}
+
+.guide-step {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-3);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.guide-step svg {
+  color: var(--accent);
+}
+
+.guide h2 {
+  margin: 0 0 var(--s3);
+  font-size: 1.22rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.guide p {
+  margin: 0 0 var(--s3);
+  color: var(--text-2);
+  font-size: 0.92rem;
+}
+
+.dots {
+  display: flex;
+  gap: 5px;
+  margin-right: auto;
+}
+
+.dots i {
+  width: 20px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.dots i.on {
+  background: var(--accent);
+}
+
+.guide-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s4) var(--s5) var(--s5);
+}
+
+/* The key map: what each thing on screen means. */
+.legend {
+  margin: var(--s4) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-soft);
+}
+
+.legend li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-2);
   font-size: 0.88rem;
-  line-height: 1.55;
+  line-height: 1.5;
 }
 
-.note--bad {
-  border-color: var(--magenta);
-  background: #ff3d9a10;
+.legend .key {
+  flex: none;
+  min-width: 5.4rem;
+  color: var(--text);
 }
 
-.rule {
-  height: 1px;
-  margin: var(--s5) 0;
-  border: 0;
-  background: linear-gradient(90deg, transparent, var(--ink-500), transparent);
+.legend .key svg {
+  color: var(--text-2);
+  vertical-align: -4px;
 }
 
-/* The sign-in screen stands on its own, centred, with no tab bar behind it. */
+.legend b {
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------- sign in */
+
+/* The only screen with the mark on it: the door. Inside, the app gets on with it. */
 .gate {
   display: flex;
   flex-direction: column;
@@ -920,58 +934,101 @@ details[open] summary {
   padding: var(--s5) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom));
 }
 
-.gate > div {
+.gate-inner {
   width: 100%;
-  max-width: 23rem;
-}
-
-.gate .card {
-  width: 100%;
-  margin: 0;
+  max-width: 21rem;
 }
 
 .gate-mark {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
   margin-bottom: var(--s5);
 }
 
-/* A wider screen gets room, not stretched phone layout. */
+.gate-mark svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.gate-mark b {
+  display: block;
+  font-size: 1.04rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.gate-mark span {
+  display: block;
+  color: var(--text-3);
+  font-size: 0.82rem;
+}
+
+.gate .panel {
+  margin: 0;
+}
+
+.gate-foot {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  margin: var(--s4) 0 0;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.gate-foot svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---------------------------------------------------------------- wider screens */
+
 @media (min-width: 46rem) {
-  .shell {
-    padding-bottom: var(--s7);
+  body {
+    font-size: 16px;
   }
-  .tabs {
-    position: sticky;
-    top: 0;
-    bottom: auto;
-    max-width: 44rem;
-    margin: 0 auto var(--s5);
-    border: 1px solid var(--ink-500);
-    border-radius: var(--r-pill);
-    padding: var(--s1) var(--s2);
+
+  .page {
+    padding-top: var(--s6);
   }
-  .tab[aria-selected="true"]::before {
-    top: -1px;
+
+  /* Two columns where there is room: the summary beside what it refers to. */
+  .cols {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: var(--s4);
+    align-items: start;
+  }
+
+  .cols > .panel {
+    margin: 0;
   }
 }
 
-/* Printing a summary to take to the doctor: ink on paper, no neon. */
+/* ---------------------------------------------------------------- print */
+
+/* Printing the summary to take to the doctor: ink on paper. */
 @media print {
   body {
     background: #fff;
     color: #000;
+    font-size: 11pt;
   }
-  body::before,
-  .tabs,
+  .topbar,
   .btn,
-  .vow,
-  details {
+  details,
+  .guide,
+  .overlay {
     display: none !important;
   }
-  .card {
-    border: 1px solid #999;
+  .panel {
+    border: 1px solid #bbb;
     background: none;
-    box-shadow: none;
+    break-inside: avoid;
+  }
+  .finding::before {
+    background: #666 !important;
   }
 }
