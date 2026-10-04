@@ -8,10 +8,10 @@ from factories import timeline_point
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi.change import judge, rcv_limits, timeline_changes, timelines
-from arogya_vahi.lab_tests import CATALOG, Variation
+from truetrend.change import judge, rcv_limits, timeline_changes, timelines
+from truetrend.lab_tests import CATALOG, Variation
 
-# Example constants for the tests only; real ones live in arogya_vahi/data/lab_tests.toml with their source.
+# Example constants for the tests only; real ones live in truetrend/data/lab_tests.toml with their source.
 VARIATION = Variation(cvi=2.0, cva=1.0, between_lab_cv=3.0, source="test")
 HBA1C = CATALOG.test("HBA1C").model_copy(update={"variation": VARIATION})
 

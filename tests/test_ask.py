@@ -5,9 +5,9 @@ import re
 import pytest
 from factories import saved_report, saved_result
 
-from arogya_vahi import ask, db
-from arogya_vahi.errors import UserError
-from arogya_vahi.models import Patient
+from truetrend import ask, db
+from truetrend.errors import UserError
+from truetrend.models import Patient
 
 DIGIT = re.compile(r"[0-9०-९]")  # Latin or Devanagari
 

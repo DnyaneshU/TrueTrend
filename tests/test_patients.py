@@ -1,14 +1,14 @@
-"""Matching reports to family members, and correcting it with arogya-patients."""
+"""Matching reports to family members, and correcting it with truetrend-patients."""
 
 import json
 
 import pytest
 from factories import printed_person, rows, saved_report
 
-from arogya_vahi import db, patients
-from arogya_vahi.errors import UserError
-from arogya_vahi.patients import main, match_report
-from arogya_vahi.summary import main as summary_main
+from truetrend import db, patients
+from truetrend.errors import UserError
+from truetrend.patients import main, match_report
+from truetrend.summary import main as summary_main
 
 
 def save(conn, sha256, name="Sunita Patil", sample_date="2026-01-15", age=None, sex=None):
@@ -62,7 +62,7 @@ def test_the_same_name_of_someone_else_is_a_new_patient_with_a_note(conn, earlie
     first, second = match(conn, **earlier), match(conn, **later)
     assert second.new and second.patient.id != first.patient.id
     assert reason in second.note
-    assert f"arogya-patients merge {first.patient.id} {second.patient.id}" in second.note
+    assert f"truetrend-patients merge {first.patient.id} {second.patient.id}" in second.note
 
 
 def test_a_middle_initial_already_printed_rules_out_another(conn):
@@ -188,7 +188,7 @@ def test_main_prints_json(conn, capsys):
 
 
 def test_main_merges_and_assigns(conn, caplog):
-    caplog.set_level("INFO", logger="arogya_vahi")
+    caplog.set_level("INFO", logger="truetrend")
     save(conn, "a", "Sunita Patil")
     save(conn, "b", "Sunita Ramesh Patil")
     save(conn, "c", "Ramesh Patil")
@@ -209,7 +209,8 @@ def test_main_assign_takes_a_number_or_new(conn, capsys):
 
 def test_main_reports_a_wrong_number_in_one_line(conn, capsys):
     assert main(["merge", "1", "2"]) == 1
-    assert capsys.readouterr().err.strip() == "error: There is no patient #1; see them with arogya-patients."
+    said = capsys.readouterr().err.strip()
+    assert said == "error: There is no patient #1; see them with truetrend-patients."
 
 
 def test_summary_is_for_the_patient_asked_for(conn, capsys):
@@ -246,8 +247,13 @@ def test_two_requests_matching_at_once_do_not_each_add_the_same_patient(storage)
 
     with closing(db.connect()) as setup:
         for sha, date in (("a", "2026-01-12"), ("b", "2026-05-20"), ("c", "2026-09-28")):
-            saved_report(conn=setup, sha256=sha, sample_date=date,
-                         patient_name_raw="Mrs. Sunita Patil", patient_sex_raw="F")
+            saved_report(
+                conn=setup,
+                sha256=sha,
+                sample_date=date,
+                patient_name_raw="Mrs. Sunita Patil",
+                patient_sex_raw="F",
+            )
 
     def match_in_its_own_connection():
         with closing(db.connect()) as conn:

@@ -1,0 +1,40 @@
+# The Marathi summary's sentences and doctor questions (truetrend/summary.py).
+#
+# Every number is a {placeholder} that code fills from verified results, exactly as the
+# report prints them (Devanagari digits, with the printed unit), so a template must never
+# contain a digit itself. Placeholders:
+#   {test}                    the test's Marathi name (name_mr in lab_tests.toml)
+#   {before} {before_date}    the previous result and its sample date
+#   {after}                   the latest result
+#   {first}  {first_date}     the first of three results in a row (trends)
+#   {limit}                   the lab's limit the latest result is outside
+#   {count}                   how many results still need checking
+#
+# Sentences start with "{test}:" and speak of "आकडा" (the number), so they read right
+# whatever the test name's gender or number. Nothing here is medical advice: only what
+# changed, how it compares with that lab's printed range, and what to ask the doctor.
+
+[sentences]
+trend_increase = "{test}: गेल्या तीन रिपोर्टमध्ये आकडा सतत वाढत गेला आहे; {first_date} रोजी {first}, आता {after}."
+trend_decrease = "{test}: गेल्या तीन रिपोर्टमध्ये आकडा सतत कमी होत गेला आहे; {first_date} रोजी {first}, आता {after}."
+real_increase = "{test}: {before_date} रोजी {before}, आता {after}. ही वाढ नेहमीच्या चढ-उतारापेक्षा जास्त आहे."
+real_decrease = "{test}: {before_date} रोजी {before}, आता {after}. ही घट नेहमीच्या चढ-उतारापेक्षा जास्त आहे."
+above_range = "{test}: आकडा {after} आहे, लॅबच्या वरच्या मर्यादेपेक्षा ({limit}) जास्त."
+below_range = "{test}: आकडा {after} आहे, लॅबच्या खालच्या मर्यादेपेक्षा ({limit}) कमी."
+to_check_one = "या रिपोर्टमधील एक आकडा अजून मूळ रिपोर्टशी तपासायचा आहे."
+to_check = "या रिपोर्टमधील {count} आकडे अजून मूळ रिपोर्टशी तपासायचे आहेत."
+stable = "मागच्या रिपोर्टच्या तुलनेत सर्व बदल नेहमीच्या चढ-उतारातच आहेत."
+partly_stable = "काही तपासण्यांची मागच्या रिपोर्टशी खात्रीने तुलना करता आली नाही; बाकीचे बदल नेहमीच्या चढ-उतारातच आहेत."
+first_report = "हा पहिलाच रिपोर्ट आहे; पुढचा रिपोर्ट आल्यावर बदल दाखवता येतील."
+not_compared = "या तपासण्यांची मागच्या रिपोर्टशी खात्रीने तुलना करता आली नाही."
+
+[questions]
+trend_increase = "{test}: आकडा सतत का वाढत आहे, आणि पुढे काय करावे?"
+trend_decrease = "{test}: आकडा सतत का कमी होत आहे, आणि पुढे काय करावे?"
+real_increase = "{test}: ही वाढ महत्त्वाची आहे का?"
+real_decrease = "{test}: ही घट महत्त्वाची आहे का?"
+above_range = "{test}: आकडा मर्यादेपेक्षा जास्त आहे, याबद्दल काय करावे?"
+below_range = "{test}: आकडा मर्यादेपेक्षा कमी आहे, याबद्दल काय करावे?"
+
+[labels]
+ask_doctor = "डॉक्टरांना विचारा:"

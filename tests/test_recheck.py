@@ -5,8 +5,8 @@ import shutil
 import pytest
 from factories import rows, saved_report, saved_result, table
 
-from arogya_vahi.config import settings
-from arogya_vahi.recheck import main, recheck
+from truetrend.config import settings
+from truetrend.recheck import main, recheck
 
 
 @pytest.fixture
@@ -68,7 +68,7 @@ def test_a_test_no_longer_in_the_catalog_is_left_as_saved(conn, save, caplog):
 
 
 def test_main_says_what_it_did(save, report_page, caplog):
-    caplog.set_level("INFO", logger="arogya_vahi")
+    caplog.set_level("INFO", logger="truetrend")
     save(report_page, saved_result("HB", 12.1))
     assert main([]) == 0
     assert "Re-checked 1 saved results: 1 verified, 0 to check." in caplog.text

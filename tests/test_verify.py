@@ -6,10 +6,10 @@ from factories import table
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.models import Result
-from arogya_vahi.text import QUALIFIERS, printed_number
-from arogya_vahi.verify import verify_results
+from truetrend.lab_tests import CATALOG
+from truetrend.models import Result
+from truetrend.text import QUALIFIERS, printed_number
+from truetrend.verify import verify_results
 
 DEVANAGARI = str.maketrans("0123456789", "०१२३४५६७८९")
 
@@ -189,7 +189,7 @@ def test_the_value_itself_does_not_verify_its_range(verify):
 
 
 def test_each_page_is_read_once_for_all_its_results(verify, report_page, monkeypatch):
-    from arogya_vahi import verify as module
+    from truetrend import verify as module
 
     calls = []
     original = module.page_rows
@@ -293,7 +293,7 @@ def test_values_below_a_detection_limit_are_left_out_of_cross_checks(verify):
 
 
 def test_cross_checks_use_the_catalogs_units():
-    # the formulas in arogya_vahi.verify are written in mg/dL and %
+    # the formulas in truetrend.verify are written in mg/dL and %
     assert {code: CATALOG.test(code).unit for code in ("CHOL", "HDL", "TG", "LDL", "GLU_F")} == dict.fromkeys(
         ("CHOL", "HDL", "TG", "LDL", "GLU_F"), "mg/dL"
     )

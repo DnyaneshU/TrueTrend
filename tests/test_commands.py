@@ -1,6 +1,6 @@
-"""The commands as a user runs them: `python -m arogya_vahi.<module>` in a fresh process.
+"""The commands as a user runs them: `python -m truetrend.<module>` in a fresh process.
 
-Run this way a module is named __main__, not arogya_vahi.<module>, so these catch problems
+Run this way a module is named __main__, not truetrend.<module>, so these catch problems
 (like its log lines going missing) that tests importing the module cannot.
 """
 
@@ -13,7 +13,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 
 def run_command(*args, storage):
-    env = {**os.environ, "AROGYA_STORAGE_DIR": str(storage), "PYTHONIOENCODING": "utf-8"}
+    env = {**os.environ, "TRUETREND_STORAGE_DIR": str(storage), "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(
         [sys.executable, "-m", *args], cwd=REPO, env=env, capture_output=True, text=True, encoding="utf-8"
     )
@@ -21,27 +21,27 @@ def run_command(*args, storage):
 
 def test_extract_command_reports_a_missing_file_in_one_line(tmp_path):
     missing = tmp_path / "missing.pdf"
-    finished = run_command("arogya_vahi.extract", str(missing), storage=tmp_path / "storage")
+    finished = run_command("truetrend.extract", str(missing), storage=tmp_path / "storage")
     assert finished.returncode == 1
     assert finished.stdout == ""
     assert finished.stderr.strip() == f"error: File not found: {missing}"
 
 
 def test_recheck_command_says_what_it_did(tmp_path):
-    finished = run_command("arogya_vahi.recheck", storage=tmp_path / "storage")
+    finished = run_command("truetrend.recheck", storage=tmp_path / "storage")
     assert finished.returncode == 0
     assert finished.stderr.strip() == "Re-checked 0 saved results: 0 verified, 0 to check."
 
 
 def test_summary_command_with_nothing_saved(tmp_path):
-    finished = run_command("arogya_vahi.summary", storage=tmp_path / "storage")
+    finished = run_command("truetrend.summary", storage=tmp_path / "storage")
     assert finished.returncode == 0
     assert finished.stdout == ""
     assert "No saved report has a sample date yet" in finished.stderr
 
 
 def test_patients_command_with_nothing_saved(tmp_path):
-    finished = run_command("arogya_vahi.patients", storage=tmp_path / "storage")
+    finished = run_command("truetrend.patients", storage=tmp_path / "storage")
     assert finished.returncode == 0
     assert finished.stdout == ""
-    assert finished.stderr.strip() == "No reports saved yet; extract one with arogya-extract."
+    assert finished.stderr.strip() == "No reports saved yet; extract one with truetrend-extract."

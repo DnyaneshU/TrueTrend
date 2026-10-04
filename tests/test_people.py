@@ -5,7 +5,7 @@ from factories import printed_person
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi.people import (
+from truetrend.people import (
     VOCABULARY,
     age_of,
     birth_year_of,

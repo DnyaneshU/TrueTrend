@@ -8,9 +8,9 @@ from contextlib import closing
 import pytest
 from factories import report_record, rows, saved_report, saved_result
 
-from arogya_vahi import db
-from arogya_vahi.config import settings
-from arogya_vahi.models import Patient, Sex, Source, Status
+from truetrend import db
+from truetrend.config import settings
+from truetrend.models import Patient, Sex, Source, Status
 
 
 def test_connect_creates_tables_and_records_the_schema_version(conn):
@@ -144,7 +144,7 @@ def test_a_version_1_database_gets_the_patient_index(tmp_path):
 
 def test_paths_saved_by_older_versions_still_resolve(tmp_path):
     assert db.resolve_stored_path("storage/originals/abc.pdf") == settings.originals_dir / "abc.pdf"
-    outside = tmp_path / "abc.pdf"  # an absolute path, from AROGYA_STORAGE_DIR outside the repo
+    outside = tmp_path / "abc.pdf"  # an absolute path, from TRUETREND_STORAGE_DIR outside the repo
     assert db.resolve_stored_path(str(outside)) == outside
 
 
@@ -255,3 +255,19 @@ def test_a_connection_can_be_used_by_the_thread_that_takes_the_next_request(conn
     with ThreadPoolExecutor(max_workers=1) as elsewhere:
         count = elsewhere.submit(lambda: conn.execute("SELECT count(*) FROM reports").fetchone()[0])
         assert count.result() == 0
+
+
+def test_a_database_from_before_the_rename_is_used_rather_than_left_behind(storage, tmp_path):
+    # The app used to be called Arogya Vahi, and its database arogya.db. Opening the new
+    # name beside the old one would start empty and silently abandon her reports, so an
+    # older database is taken over on the first open.
+    from truetrend.config import settings
+
+    settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    old = settings.storage_dir / "arogya.db"
+    with closing(db.connect(old)) as before:
+        saved_report(before, "a", sample_date="2026-01-12")
+
+    with closing(db.connect()) as conn:  # the new default name
+        assert len(db.report_people(conn)) == 1, "her reports came with the rename"
+    assert not old.exists(), "and the old file is gone, so there is only one database"

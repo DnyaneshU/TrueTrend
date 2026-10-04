@@ -8,12 +8,12 @@ import ollama
 import pytest
 from pydantic import ValidationError
 
-from arogya_vahi import config, gemma, lab_tests
-from arogya_vahi.config import Settings
-from arogya_vahi.errors import UserError
-from arogya_vahi.gemma import _client as _real_client
-from arogya_vahi.gemma import extract_results, transcribe
-from arogya_vahi.models import PageExtraction, PageInput
+from truetrend import config, gemma, lab_tests
+from truetrend.config import Settings
+from truetrend.errors import UserError
+from truetrend.gemma import _client as _real_client
+from truetrend.gemma import extract_results, transcribe
+from truetrend.models import PageExtraction, PageInput
 
 VALID_REPLY = (
     '{"patient_name":"Mrs. Sunita Patil","age":"62","sex":"F","lab_name":"SUNRISE DIAGNOSTICS",'
@@ -179,8 +179,8 @@ def test_a_host_without_a_scheme_is_http():
 
 
 def test_an_invalid_setting_is_one_line_not_a_traceback(monkeypatch):
-    monkeypatch.setenv("AROGYA_NUM_CTX", "lots")
-    message = "error: invalid setting: AROGYA_NUM_CTX: Input should be a valid integer"
+    monkeypatch.setenv("TRUETREND_NUM_CTX", "lots")
+    message = "error: invalid setting: TRUETREND_NUM_CTX: Input should be a valid integer"
     with pytest.raises(SystemExit, match=message):
         config._load()
 

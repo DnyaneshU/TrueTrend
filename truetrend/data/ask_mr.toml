@@ -1,0 +1,51 @@
+# What the app says back when she asks a question (truetrend/ask.py).
+#
+# Gemma never writes any of this. It only says which test she means and what she is
+# asking about it; code picks the phrase below and fills every {placeholder} from a
+# saved, verified result, exactly as its report prints it. So a template must never
+# contain a digit of its own -- there is a test that checks this.
+#
+# Placeholders:
+#   {value} {before} {after}   a reading, with the unit its report printed
+#   {date} {before_date}       its sample date, in Marathi
+#   {lab}                      the lab that printed it
+#   {limit} {range}            the lab's own printed range, or the limit it is outside
+#   {count} {readings}         how many readings, and all of them with their dates
+#   {said}                     from [said] below: which way it moved
+#
+# Nothing here is medical advice: only what the report says, how it compares with that
+# lab's own printed range, and whether a change is bigger than the usual variation.
+
+[answers]
+# What a reading is now
+latest = "{date} रोजी ({lab}) आकडा {value} होता."
+
+# Whether it changed
+changed = "{before_date} रोजी {before}, आता {after} — आकडा {said}."
+within_variation = "हा फरक नेहमीच्या चढ-उतारातच आहे, त्यामुळे यात काळजीचं कारण दिसत नाही."
+not_judged = "या दोन रिपोर्टची खात्रीने तुलना करता आली नाही."
+only_one = "या तपासणीचा एकच रिपोर्ट आहे, त्यामुळे तुलना करता येत नाही."
+
+# Against the lab's printed range
+above = "आकडा {value} आहे, लॅबच्या वरच्या मर्यादेपेक्षा ({limit}) जास्त. याबद्दल डॉक्टरांना विचारा."
+below = "आकडा {value} आहे, लॅबच्या खालच्या मर्यादेपेक्षा ({limit}) कमी. याबद्दल डॉक्टरांना विचारा."
+inside = "आकडा {value} आहे, लॅबच्या मर्यादेत ({range}) आहे."
+no_range = "या रिपोर्टवर लॅबची मर्यादा छापलेली सापडली नाही, त्यामुळे तुलना करता येत नाही."
+
+# The whole history
+history = "एकूण {count} रिपोर्ट आहेत: {readings}."
+
+# When she was last tested
+when = "शेवटची तपासणी {date} रोजी झाली ({lab})."
+
+# When the question could not be placed
+not_understood = "हा प्रश्न नीट समजला नाही. कोणत्या तपासणीबद्दल विचारत आहात?"
+no_results = "या तपासणीचा रिपोर्ट अजून या वहीत नाही."
+you_could_ask = "यांबद्दल विचारू शकता:"
+
+[said]
+# Which way it moved, said plainly. The judgement itself is the change engine's.
+real_increase = "वाढला आहे"
+real_decrease = "कमी झाला आहे"
+within_normal_variation = "जवळपास तेवढाच आहे"
+not_judged = "बदलला आहे"

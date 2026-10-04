@@ -2,9 +2,9 @@
 
 import pytest
 
-from arogya_vahi import speech
-from arogya_vahi.config import settings
-from arogya_vahi.errors import UserError
+from truetrend import speech
+from truetrend.config import settings
+from truetrend.errors import UserError
 
 
 def test_the_voice_is_not_installed_on_a_fresh_machine(storage):
@@ -13,7 +13,7 @@ def test_the_voice_is_not_installed_on_a_fresh_machine(storage):
 
 def test_asking_it_to_speak_before_it_is_installed_says_how_to_install_it(storage):
     speech._voice.cache_clear()
-    with pytest.raises(UserError, match="arogya-voice install"):
+    with pytest.raises(UserError, match="truetrend-voice install"):
         speech.say("काहीतरी")
 
 

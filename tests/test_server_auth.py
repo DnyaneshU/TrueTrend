@@ -5,8 +5,8 @@ import re
 import pytest
 from factories import saved_report, saved_result
 
-from arogya_vahi import accounts
-from arogya_vahi.config import settings
+from truetrend import accounts
+from truetrend.config import settings
 
 PASSWORD = "liquorice-tractor-92"
 
@@ -252,7 +252,7 @@ def test_asking_for_audio_without_the_voice_says_how_to_get_it(signed_in, conn):
     saved_report(conn, "a", [saved_result("HBA1C", 9.1, ref_high=5.6)], sample_date="2026-01-15")
     signed_in.get("/api/patients")  # match the report, so the summary has something to say
     response = signed_in.get("/api/summary/audio")
-    assert response.status_code == 503 and "arogya-voice install" in response.json()["detail"]
+    assert response.status_code == 503 and "truetrend-voice install" in response.json()["detail"]
 
 
 def test_a_signed_out_browser_cannot_ask_for_the_audio(anyone):

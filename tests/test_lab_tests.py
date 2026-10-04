@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from arogya_vahi.lab_tests import CATALOG, TestCode
+from truetrend.lab_tests import CATALOG, TestCode
 
 # Names as Indian lab reports print them; each must be accepted for its code.
 MATCHING = [

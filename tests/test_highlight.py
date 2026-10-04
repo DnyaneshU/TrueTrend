@@ -2,8 +2,8 @@
 
 import pytest
 
-from arogya_vahi.errors import UserError
-from arogya_vahi.highlight import page_png
+from truetrend.errors import UserError
+from truetrend.highlight import page_png
 
 
 def size_of(png: bytes) -> tuple[int, int]:
@@ -41,7 +41,7 @@ def test_a_page_the_report_does_not_have_is_refused(make_pdf, report_page, page)
 
 
 def test_a_huge_page_is_drawn_no_wider_than_the_limit(make_pdf, report_page, monkeypatch):
-    from arogya_vahi.config import settings
+    from truetrend.config import settings
 
     monkeypatch.setattr(settings, "highlight_max_width", 400)
     width, _ = size_of(page_png(make_pdf([report_page]), page=1))
@@ -49,7 +49,7 @@ def test_a_huge_page_is_drawn_no_wider_than_the_limit(make_pdf, report_page, mon
 
 
 def test_a_narrow_page_is_drawn_wider_so_the_print_can_be_read(make_pdf, report_page, monkeypatch):
-    from arogya_vahi.config import settings
+    from truetrend.config import settings
 
     monkeypatch.setattr(settings, "highlight_max_width", 4000)
     width, _ = size_of(page_png(make_pdf([report_page]), page=1))
