@@ -4,7 +4,7 @@
 
 Run it after editing the catalog (names, units, believable limits) or after updating
 the app: each result is rebuilt from what was printed and saved, and checked against
-the report's stored original PDF.
+the report's stored original PDF. Reports not matched to a patient yet are matched.
 """
 
 import argparse
@@ -15,7 +15,7 @@ from contextlib import closing, nullcontext
 
 import pymupdf
 
-from arogya_vahi import cli, db
+from arogya_vahi import cli, db, patients
 from arogya_vahi.errors import UserError
 from arogya_vahi.lab_tests import CATALOG
 from arogya_vahi.pages import open_pdf
@@ -31,21 +31,19 @@ def recheck(conn: sqlite3.Connection) -> tuple[int, int]:
     """
     known = {test.code for test in CATALOG.tests}
     total = verified = 0
-    with conn:
-        for report_id, file_path in db.saved_reports(conn):
-            saved = db.printed_results(conn, report_id)
-            if unknown := sorted({result.test_code for _, result in saved} - known):
-                logger.warning(
-                    "report #%d: left %s as saved: not in the catalog", report_id, ", ".join(unknown)
-                )
-            saved = [(result_id, result) for result_id, result in saved if result.test_code in known]
-            doc = _open_original(report_id, file_path)
-            with nullcontext() if doc is None else doc:
-                checked = verify_results([result for _, result in saved], doc)
+    for report_id, file_path in db.saved_reports(conn):
+        saved = db.printed_results(conn, report_id)
+        if unknown := sorted({result.test_code for _, result in saved} - known):
+            logger.warning("report #%d: left %s as saved: not in the catalog", report_id, ", ".join(unknown))
+        saved = [(result_id, result) for result_id, result in saved if result.test_code in known]
+        doc = _open_original(report_id, file_path)
+        with nullcontext() if doc is None else doc:
+            checked = verify_results([result for _, result in saved], doc)
+        with db.write(conn):  # the PDF is read first: a run saving a report meanwhile waits only briefly
             for (result_id, _), result in zip(saved, checked, strict=True):
                 db.update_result(conn, result_id, result)
-            total += len(checked)
-            verified += sum(result.status == "verified" for result in checked)
+        total += len(checked)
+        verified += sum(result.status == "verified" for result in checked)
     return total, verified
 
 
@@ -60,6 +58,7 @@ def _open_original(report_id: int, file_path: str) -> pymupdf.Document | None:
 def _command(args: argparse.Namespace) -> int:
     with closing(db.connect()) as conn:
         total, verified = recheck(conn)
+        patients.match_saved(conn)
     logger.info("Re-checked %d saved results: %d verified, %d to check.", total, verified, total - verified)
     return 0
 

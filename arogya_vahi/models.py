@@ -11,6 +11,7 @@ from arogya_vahi.text import Qualifier
 PageMode = Literal["text", "vision"]
 Status = Literal["verified", "needs_check", "rejected"]
 Source = Literal["whatsapp", "gmail", "upload", "gmail_import"]  # how a report arrived
+Sex = Literal["F", "M"]
 
 
 class PageInput(BaseModel):
@@ -135,12 +136,24 @@ class ReportRecord(BaseModel):
     file_path: str
     sha256: str
     is_scanned: bool
-    patient_name_raw: str | None  # as printed; matched to a patient later
+    patient_name_raw: str | None  # as printed
     patient_age_raw: str | None
     patient_sex_raw: str | None
     extract_model: str
     extract_seconds: float
     raw_json: str  # Gemma's reply for every page
+    patient_id: int | None = None  # who the report is for (arogya_vahi.patients); None: no one yet
+
+    @property
+    def person(self) -> "PrintedPerson":
+        """Who the report says it is for, as printed."""
+        return PrintedPerson(
+            name=self.patient_name_raw,
+            age=self.patient_age_raw,
+            sex=self.patient_sex_raw,
+            sample_date=self.sample_date,
+            report_date=self.report_date,
+        )
 
 
 class ReportOutput(BaseModel):
@@ -151,6 +164,7 @@ class ReportOutput(BaseModel):
     sha256: str
     model: str
     seconds: float
+    patient_id: int | None  # None when the report names no one, or could be more than one patient
     patient_name: str | None
     age: str | None
     sex: str | None
@@ -164,6 +178,58 @@ class ReportOutput(BaseModel):
     results: list[SavedResult]
 
 
+# --- Patients: the family members reports are for.
+
+
+class Patient(BaseModel):
+    """A row of the patients table."""
+
+    id: int
+    display_name: str
+    aliases: list[str] = Field(default_factory=list)  # other names printed on their reports
+    sex: Sex | None = None
+    birth_year: int | None = None  # estimated from an age printed on a report: +/- 1 year
+
+
+class PrintedPerson(BaseModel):
+    """Who a report says it is for, as printed, and when (the age is as of then)."""
+
+    name: str | None
+    age: str | None
+    sex: str | None
+    sample_date: str | None  # ISO YYYY-MM-DD
+    report_date: str | None
+
+
+class ReportPerson(PrintedPerson):
+    """A saved report's printed person, and the patient it was matched to."""
+
+    report_id: int
+    patient_id: int | None
+    lab_name: str | None
+
+
+class Match(BaseModel):
+    """Who a report was matched to: a patient (new or not), or no one and why."""
+
+    patient: Patient | None
+    new: bool = False
+    note: str | None = None  # something the user should know or fix
+
+
+class PatientReports(Patient):
+    """A patient and the reports matched to them, oldest sample first."""
+
+    reports: list[ReportPerson]
+
+
+class PatientListing(BaseModel):
+    """What arogya-patients lists: every patient, and the reports matched to no one."""
+
+    patients: list[PatientReports]
+    unmatched: list[ReportPerson]
+
+
 # --- Timelines and changes between reports.
 
 
@@ -172,6 +238,7 @@ class TimelinePoint(BaseModel):
 
     result_id: int
     report_id: int
+    patient_id: int | None  # None: the report isn't matched to anyone
     patient_name: str | None  # as printed on the report
     test_code: str
     sample_date: date

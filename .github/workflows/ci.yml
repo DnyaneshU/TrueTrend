@@ -47,3 +47,4 @@ jobs:
           /tmp/clean/bin/arogya-recheck --help
           AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-recheck
           AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-summary --json
+          AROGYA_STORAGE_DIR=/tmp/arogya /tmp/clean/bin/arogya-patients --json

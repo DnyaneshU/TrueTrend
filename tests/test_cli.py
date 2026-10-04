@@ -6,7 +6,7 @@ from contextlib import closing
 import pytest
 from factories import report_record
 
-from arogya_vahi import cli, db, gemma
+from arogya_vahi import cli, db, gemma, patients
 from arogya_vahi.errors import UserError
 from arogya_vahi.extract import main, run
 from arogya_vahi.models import PageExtraction
@@ -182,6 +182,41 @@ def test_force_replaces_the_old_report(storage, fake_gemma, make_pdf, report_pag
     assert query("SELECT COUNT(*) FROM results") == [(2,)]
 
 
+def test_the_report_is_saved_for_the_patient_it_names(storage, use_gemma, make_pdf, report_page):
+    use_gemma(FakeGemma())
+    first = run(make_pdf([report_page], name="a.pdf"))
+    use_gemma(FakeGemma({**GOOD_REPLY, "patient_name": "SUNITA PATIL", "sample_date": "12/09/2026"}))
+    second = run(make_pdf([report_page, [(50, 60, "page 2")]], name="b.pdf"))
+    use_gemma(FakeGemma({**GOOD_REPLY, "patient_name": "Mr. Anil Patil", "age": "65", "sex": "M"}))
+    third = run(make_pdf([report_page, [], []], name="c.pdf"))
+    assert (first.patient_id, second.patient_id, third.patient_id) == (1, 1, 2)
+    assert query("SELECT id, display_name, sex, birth_year FROM patients") == [
+        (1, "Sunita Patil", "F", 1964),
+        (2, "Anil Patil", "M", 1961),
+    ]
+    assert query("SELECT patient_id FROM reports ORDER BY id") == [(1,), (1,), (2,)]
+
+
+def test_a_report_read_again_stays_with_the_patient_set_by_hand(storage, fake_gemma, make_pdf, report_page):
+    pdf = make_pdf([report_page])
+    run(pdf)
+    with closing(db.connect()) as conn:
+        patients.assign(conn, 1, None)  # say Sunita Patil's report was really someone else's
+    assert run(pdf, force=True).patient_id == 2
+
+
+def test_a_report_that_could_be_two_patients_is_saved_for_no_one(storage, use_gemma, make_pdf, report_page):
+    with closing(db.connect()) as conn:
+        for sha256, age in (("a", "62"), ("b", "8")):
+            record = report_record(sha256=sha256, sample_date="2026-01-15", patient_age_raw=age)
+            db.save_report(conn, record, [])
+        patients.match_saved(conn)
+    use_gemma(FakeGemma({**GOOD_REPLY, "age": None, "sex": None, "patient_name": "Sunita Patil"}))
+    out = run(make_pdf([report_page]))
+    assert out.patient_id is None
+    assert any("could be patient #1 or #2" in warning for warning in out.warnings)
+
+
 def test_missing_date_and_no_tests_are_warnings_not_errors(storage, use_gemma, make_pdf, report_page):
     use_gemma(FakeGemma(first=EMPTY_REPLY))
     out = run(make_pdf([report_page]))
@@ -216,6 +251,12 @@ def test_a_sample_date_not_printed_in_the_pdf_is_not_used(storage, use_gemma, ma
     assert (out.sample_date, out.sample_date_text) == (None, "12/08/2026 08:10")
     assert any("is not printed in the PDF's text" in w for w in out.warnings)
     assert query("SELECT sample_date FROM reports") == [(None,)]
+
+
+def test_a_sample_date_must_be_printed_whole(storage, use_gemma, make_pdf, report_page):
+    # "2/09/2026" is inside the printed "12/09/2026 08:10", but it is not what the report says
+    use_gemma(FakeGemma(first={**GOOD_REPLY, "sample_date": "2/09/2026"}))
+    assert run(make_pdf([report_page])).sample_date is None
 
 
 def test_the_original_is_stored_whole_even_over_a_damaged_copy(storage, fake_gemma, make_pdf, report_page):

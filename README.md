@@ -31,16 +31,21 @@ On macOS or Linux use `.venv/bin/python` instead of `.venv\Scripts\python`.
 arogya-extract "C:\path\to\report.pdf"   # read a report, verify it, save it, print it as JSON
 arogya-summary                           # the Marathi summary of the latest report
 arogya-summary --json                    # ... with every finding and judged change
+arogya-summary --patient 2               # ... of patient #2's latest report
+arogya-patients                          # who each report is for
+arogya-patients merge 1 3                # patients #1 and #3 are the same person
+arogya-patients assign 7 2               # report #7 is patient #2's ("new": someone new)
 arogya-recheck                           # re-verify everything saved, without calling Gemma
 ```
 
-Each command is also `python -m arogya_vahi.<extract|summary|recheck>`, and each has
+Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck>`, and each has
 `--help`. Progress and warnings go to the terminal; JSON goes to standard output.
 
 - `arogya-extract --force` reads a report that is already saved again; `--model
   gemma4:e2b` uses the smaller model.
 - Run `arogya-recheck` after editing the catalog (names, units, believable limits) or
-  after updating the app.
+  after updating the app. It also matches reports saved before patient matching existed
+  (so do `arogya-summary` and `arogya-patients`).
 
 ## How it works
 
@@ -80,14 +85,32 @@ Each command is also `python -m arogya_vahi.<extract|summary|recheck>`, and each
    result outside that lab's verified range. Each comes with a question for the doctor.
    Sentences are templates whose numbers are placeholders, filled by code with results
    exactly as the report prints them, in Devanagari digits. A result that needs checking is
-   never stated; the summary only says how many there are. It covers the person named on
-   the latest report; reports naming someone else, or no one, are left out with a warning.
+   never stated; the summary only says how many there are. It covers the patient the latest
+   report is for; reports for someone else, or no one, are left out with a warning.
+6. **Patients.** Each report is matched to a family member by its printed name, ignoring
+   case, punctuation, word order and titles ("Mrs. Sunita Patil" = "PATIL SUNITA"), and a
+   middle initial only one of the two prints ("Sunita R. Patil" = "Sunita Patil"). Nothing
+   else is guessed: "S. Patil" or "Sunita Ramesh Patil" is a new patient until
+   `arogya-patients merge` joins the two, and then that spelling is remembered. Someone
+   else is someone else:
+   - "Sunita K. Patil", when the patient is also printed as "Sunita R. Patil" (a middle
+     initial is a father's or husband's name);
+   - "B/O Sunita Patil", Sunita's baby (and S/O, D/O, W/O);
+   - a same-named patient of the other sex (printed, or from "Mr."/"Mrs."), or born more
+     than a year apart (from a printed age or date of birth);
+
+   each with a warning saying how to merge them if they are the same person. A report
+   that could be two patients, or names no one ("Mrs.", "Patient"), is matched to no one
+   and compared with nothing. `arogya-patients assign` moves a report; a report read
+   again with `--force` stays with the patient it was for. Two reports read at once can't
+   both add the same new patient.
 
 ## Configuration
 
 | What | Where |
 |---|---|
 | The tests read, the names labs print for them, look-alike tests to reject, standard units, conversions, believable limits, variation constants with their sources, cross-test checks | `arogya_vahi/data/lab_tests.toml` |
+| How labs print a person: titles, sex words, relation markers (B/O), placeholder names, age units | `arogya_vahi/data/people.toml` |
 | The summary's Marathi sentences and doctor questions | `arogya_vahi/data/summary_mr.toml` |
 | The instructions sent to Gemma | `arogya_vahi/prompts/` |
 | Model, Ollama host and options, page-reading and verification thresholds, storage folder | `arogya_vahi/config.py` |
@@ -125,7 +148,7 @@ but not judged.
   and HDL cholesterol, triglycerides, creatinine, haemoglobin, vitamin D (25-OH),
   vitamin B12, uric acid and urea.
 - Values on scanned pages are never verified; a confirmation screen is planned.
-- Until patient matching exists, a person is recognised by the name printed on the report.
+- Patients are matched by printed name, sex and age only; a lab's patient ID is not read.
 - Post-prandial glucose changes are never judged (no published biological variation);
   TSH, free T4, haemoglobin and B12 changes are judged only within one lab.
 
@@ -163,6 +186,7 @@ Linux, and installs the built wheel in a clean environment to check that it runs
 | `verify.py` | Each result checked against the PDF, its believable limits and the report's other results |
 | `change.py` | Real change or normal variation, by the Reference Change Value |
 | `summary.py` | The Marathi summary and doctor questions (the `arogya-summary` command) |
+| `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |

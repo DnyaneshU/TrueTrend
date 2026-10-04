@@ -3,9 +3,8 @@
 import shutil
 
 import pytest
-from factories import report_record, rows, saved_result, table
+from factories import rows, saved_report, saved_result, table
 
-from arogya_vahi import db
 from arogya_vahi.config import settings
 from arogya_vahi.recheck import main, recheck
 
@@ -20,7 +19,7 @@ def save(conn, make_pdf):
             settings.originals_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(pdf, settings.originals_dir / "abc123.pdf")
         unchecked = [result.model_copy(update={"status": "needs_check"}) for result in results]
-        db.save_report(conn, report_record(), unchecked)
+        saved_report(conn, results=unchecked)
 
     return _save
 

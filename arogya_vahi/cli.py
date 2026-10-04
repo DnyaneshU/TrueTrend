@@ -6,6 +6,8 @@ import sqlite3
 import sys
 from collections.abc import Callable
 
+from pydantic import ValidationError
+
 from arogya_vahi.console import configure_console
 from arogya_vahi.errors import UserError
 
@@ -27,10 +29,14 @@ def run_command(
         logger.error("%s", error)
     except sqlite3.OperationalError as error:
         logger.error("The database could not be used (%s). Is another command still running?", error)
+    except sqlite3.IntegrityError as error:
+        logger.error("The database refused the change (%s); nothing was saved. Try again.", error)
     except sqlite3.DatabaseError as error:
         logger.error("The database file is damaged or not a database (%s).", error)
     except OSError as error:
         logger.error("A file could not be read or written: %s", error)
+    except ValidationError as error:
+        logger.error("Saved data could not be read: %s", error.errors()[0]["msg"])
     except KeyboardInterrupt:
         logger.error("Cancelled. Nothing was saved.")
         return EXIT_CANCELLED

@@ -45,6 +45,7 @@ Repository = "https://github.com/DnyaneshU/TrueTrend"
 
 [project.scripts]
 arogya-extract = "arogya_vahi.extract:main"
+arogya-patients = "arogya_vahi.patients:main"
 arogya-recheck = "arogya_vahi.recheck:main"
 arogya-summary = "arogya_vahi.summary:main"
 

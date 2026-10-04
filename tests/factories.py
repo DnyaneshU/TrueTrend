@@ -3,8 +3,9 @@
 from datetime import date
 from itertools import count
 
+from arogya_vahi import db
 from arogya_vahi.lab_tests import CATALOG
-from arogya_vahi.models import ReportRecord, Result, SavedResult, TimelinePoint
+from arogya_vahi.models import PrintedPerson, ReportRecord, Result, SavedResult, TimelinePoint
 
 _ids = count(1)
 
@@ -52,7 +53,8 @@ def timeline_point(
     high=None,
     **overrides,
 ) -> TimelinePoint:
-    """A verified result on a timeline: from Sunrise Diagnostics, for Sunita Patil, in the standard unit.
+    """A verified result on a timeline: from Sunrise Diagnostics, for Sunita Patil (patient #1), in the
+    standard unit.
 
     low/high give a verified normal range, printed as it reads ("4 - 5.6", "< 200", "> 40").
     """
@@ -67,7 +69,8 @@ def timeline_point(
         ref_text = None
     report_id = overrides.pop("report_id", when.toordinal())
     fields = {
-        "result_id": next(_ids), "report_id": report_id, "patient_name": "Sunita Patil", "test_code": code,
+        "result_id": next(_ids), "report_id": report_id, "patient_id": 1, "patient_name": "Sunita Patil",
+        "test_code": code,
         "sample_date": when, "lab_name": "Sunrise Diagnostics", "value_text": f"{value:g}", "value": value,
         "unit": unit, "qualifier": None, "value_std": value, "unit_std": unit, "ref_text": ref_text,
         "ref_low": low, "ref_high": high, "ref_verified": ref_text is not None, "status": "verified",
@@ -88,3 +91,16 @@ def table(*rows: tuple[str, str, str], top: int = 100) -> list[tuple[int, int, s
 def rows(conn, sql: str, *args) -> list[tuple]:
     """A query's rows as plain tuples."""
     return [tuple(row) for row in conn.execute(sql, args)]
+
+
+def printed_person(
+    name: str | None = "Sunita Patil", age=None, sex=None, sample_date="2026-01-15", report_date=None
+) -> PrintedPerson:
+    """Who a report says it is for, as printed."""
+    return PrintedPerson(name=name, age=age, sex=sex, sample_date=sample_date, report_date=report_date)
+
+
+def saved_report(conn, sha256: str = "abc123", results=None, **record_fields) -> int:
+    """Save a report (one verified HbA1c result unless `results` says otherwise); returns its id."""
+    record = report_record(sha256=sha256, file_path=f"{sha256}.pdf", **record_fields)
+    return db.save_report(conn, record, [saved_result()] if results is None else list(results))

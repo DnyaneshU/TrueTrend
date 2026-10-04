@@ -38,3 +38,10 @@ def test_summary_command_with_nothing_saved(tmp_path):
     assert finished.returncode == 0
     assert finished.stdout == ""
     assert "No saved report has a sample date yet" in finished.stderr
+
+
+def test_patients_command_with_nothing_saved(tmp_path):
+    finished = run_command("arogya_vahi.patients", storage=tmp_path / "storage")
+    assert finished.returncode == 0
+    assert finished.stdout == ""
+    assert finished.stderr.strip() == "No reports saved yet; extract one with arogya-extract."

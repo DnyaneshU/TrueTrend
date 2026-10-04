@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from platformdirs import user_data_dir
-from pydantic import field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _CHECKOUT = Path(__file__).resolve().parent.parent  # the repo, when run from a source checkout
@@ -77,6 +77,7 @@ class Settings(BaseSettings):
 
 
 _WINDOWS_LONG_PATH = "\\\\?\\"  # the \\?\ prefix: no 260-character limit
+_WINDOWS_SHARE = "\\\\"  # a network share, \\server\share
 
 
 def _long_path(path: Path) -> Path:
@@ -84,7 +85,11 @@ def _long_path(path: Path) -> Path:
     if os.name != "nt":
         return path
     resolved = str(path.resolve())
-    return Path(resolved if resolved.startswith(_WINDOWS_LONG_PATH) else _WINDOWS_LONG_PATH + resolved)
+    if resolved.startswith(_WINDOWS_LONG_PATH):
+        return Path(resolved)
+    if resolved.startswith(_WINDOWS_SHARE):  # \\server\share takes the prefix as \\?\UNC\server\share
+        return Path(_WINDOWS_LONG_PATH + "UNC\\" + resolved[len(_WINDOWS_SHARE) :])
+    return Path(_WINDOWS_LONG_PATH + resolved)
 
 
 def _is_loopback(hostname: str) -> bool:
@@ -96,4 +101,19 @@ def _is_loopback(hostname: str) -> bool:
         return False
 
 
-settings = Settings()
+def _problem(error: dict) -> str:
+    """One validation error as the user can act on it: "AROGYA_NUM_CTX: ..." or the message alone."""
+    message = error["msg"].removeprefix("Value error, ")
+    return f"AROGYA_{'_'.join(map(str, error['loc'])).upper()}: {message}" if error["loc"] else message
+
+
+def _load() -> Settings:
+    """The settings, or one line saying which is wrong: they load before any command runs."""
+    try:
+        return Settings()
+    except ValidationError as error:
+        problems = "; ".join(_problem(e) for e in error.errors())
+        raise SystemExit(f"error: invalid setting: {problems}") from None
+
+
+settings = _load()

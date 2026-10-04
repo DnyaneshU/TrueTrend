@@ -5,8 +5,9 @@
 
 Pages are read by arogya_vahi.pages, Gemma is called by arogya_vahi.gemma, the answers
 are merged by arogya_vahi.pipeline, and each result is normalised and checked against
-the PDF by arogya_vahi.verify. This module stores the original, saves the report to
-SQLite and prints it as JSON.
+the PDF by arogya_vahi.verify, and the report is matched to a family member by
+arogya_vahi.patients. This module stores the original, saves the report to SQLite and
+prints it as JSON.
 """
 
 import argparse
@@ -14,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
 import tempfile
@@ -22,7 +24,7 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from arogya_vahi import cli, db, gemma
+from arogya_vahi import cli, db, gemma, patients
 from arogya_vahi.config import settings
 from arogya_vahi.dates import parse_date
 from arogya_vahi.errors import UserError
@@ -75,13 +77,16 @@ def run(
 
     dates, warnings = _dates(extraction, pages)
     record = _record(extraction, dates, pages, stored, sha256, model, seconds)
-    report_id = _save(record, results, db_path, replace=force)
+    report_id, patient_id, patient_note = _save(record, results, db_path, replace=force)
+    if patient_note:
+        warnings.append(patient_note)
     for warning in warnings:
         logger.warning(warning)
     verified = sum(result.status == "verified" for result in results)
     logger.info(
-        "Saved report #%d: %s, %d verified against the PDF, %d to check; %s s.",
-        report_id, plural(len(results), "result"), verified, len(results) - verified, seconds,
+        "Saved report #%d%s: %s, %d verified against the PDF, %d to check; %s s.",
+        report_id, f" for patient #{patient_id}" if patient_id else "", plural(len(results), "result"),
+        verified, len(results) - verified, seconds,
     )  # fmt: skip
     header = extraction.header
     return ReportOutput(
@@ -90,6 +95,7 @@ def run(
         sha256=sha256,
         model=model,
         seconds=seconds,
+        patient_id=patient_id,
         patient_name=header.patient_name,
         age=header.age,
         sex=header.sex,
@@ -147,9 +153,10 @@ def _dates(extraction: Extraction, pages: list[PageInput]) -> tuple[dict[str, st
 
 
 def _printed_in(text: str, pages: list[PageInput]) -> bool:
-    """True when the text is printed on a digital page (not just in Gemma's reading of a scan)."""
-    wanted = _comparable(text)
-    return any(wanted in _comparable(page.text) for page in pages if page.mode == "text")
+    """True when the text is printed, whole, on a digital page (not just in Gemma's reading of
+    a scan): "1/09/2026" is not printed in "21/09/2026"."""
+    wanted = re.compile(rf"(?<!\d){re.escape(_comparable(text))}(?!\d)")
+    return any(wanted.search(_comparable(page.text)) for page in pages if page.mode == "text")
 
 
 def _comparable(text: str) -> str:
@@ -184,10 +191,28 @@ def _record(
     )
 
 
-def _save(record: ReportRecord, results: list[SavedResult], db_path: Path | None, replace: bool) -> int:
+def _save(
+    record: ReportRecord, results: list[SavedResult], db_path: Path | None, replace: bool
+) -> tuple[int, int | None, str | None]:
+    """Save the report for the patient it names: (report id, patient id, a note about the patient).
+
+    A report read again stays with the patient it was for, who may have been set by hand.
+    The patient and the report are saved in one transaction, under the write lock from
+    the start, so another run can't add the same new patient meanwhile.
+    """
     try:
-        with closing(db.connect(db_path)) as conn:
-            return db.save_report(conn, record, results, replace=replace)
+        with closing(db.connect(db_path)) as conn, db.write(conn):
+            patient_id = db.report_patient_id(conn, record.sha256) if replace else None
+            note = None
+            if patient_id is None:
+                match = patients.match_report(conn, record.person)
+                patient_id, note = (match.patient.id if match.patient else None), match.note
+                if match.new:
+                    logger.info("New patient #%d: %s.", match.patient.id, match.patient.display_name)
+            report_id = db.save_report(
+                conn, record.model_copy(update={"patient_id": patient_id}), results, replace=replace
+            )
+            return report_id, patient_id, note
     except sqlite3.IntegrityError as error:
         if "reports.sha256" not in str(error):
             raise
@@ -208,7 +233,16 @@ def _store_original(data: bytes, sha256: str, originals_dir: Path) -> Path:
         return stored
     with tempfile.NamedTemporaryFile(dir=originals_dir, suffix=".part", delete=False) as part:
         part.write(data)
-    os.replace(part.name, stored)
+        part.flush()
+        os.fsync(part.fileno())
+    try:
+        os.replace(part.name, stored)
+    except PermissionError:
+        raise UserError(
+            f"The stored copy {stored.name} is open in another program; close it and try again."
+        ) from None
+    finally:
+        Path(part.name).unlink(missing_ok=True)
     return stored
 
 
