@@ -1,16 +1,19 @@
 <!doctype html>
-<html lang="mr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#07070d" />
-    <meta name="description" content="आरोग्य वही — घरातल्या सगळ्या रक्त तपासणीचे रिपोर्ट एका ठिकाणी, मराठीत." />
-    <!-- iOS: open full-screen when she adds it to her home screen, without a PWA install step -->
+    <meta
+      name="description"
+      content="Every lab report the family has, in one place, with every value checked against the report it came from."
+    />
+    <!-- iOS: open full-screen when it is added to the home screen, without a PWA install step -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="आरोग्य वही" />
-    <title>आरोग्य वही</title>
+    <meta name="apple-mobile-web-app-title" content="Arogya Vahi" />
+    <title>Arogya Vahi</title>
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icon.svg" />
     <link rel="stylesheet" href="styles.css" />
@@ -98,32 +101,32 @@
     </svg>
 
     <!-- ============================================ the sign-in gate -->
-    <!-- Shown until this browser has a session; the rest of the app is not built until then. -->
+    <!-- Shown until this browser has a session; the app behind it is not drawn until then. -->
     <div class="gate" id="gate" hidden>
       <div>
         <div class="gate-mark">
           <svg class="mark" style="width: 58px; height: 58px"><use href="#i-mark" /></svg>
         </div>
         <div class="card card--cyan">
-          <p class="eyebrow" id="gate-eyebrow">आरोग्य वही</p>
-          <h1 id="gate-title">स्वागत आहे</h1>
+          <p class="eyebrow">Arogya Vahi</p>
+          <h1 id="gate-title">Welcome</h1>
           <p class="muted small" id="gate-lede"></p>
 
           <form id="gate-form" autocomplete="on">
-            <label for="gate-name">नाव</label>
+            <label for="gate-name">Name</label>
             <input id="gate-name" name="username" type="text" autocomplete="username"
                    autocapitalize="none" spellcheck="false" required />
 
-            <label for="gate-password">पासवर्ड</label>
+            <label for="gate-password">Password</label>
             <input id="gate-password" name="password" type="password" required />
 
             <p class="note note--bad" id="gate-error" hidden></p>
-            <button class="btn btn--go btn--wide" type="submit" id="gate-submit">पुढे</button>
+            <button class="btn btn--go btn--wide" type="submit" id="gate-submit">Continue</button>
           </form>
 
           <p class="small muted" style="margin-top: var(--s4); text-align: center">
             <svg width="14" height="14" style="vertical-align: -2px"><use href="#i-shield" /></svg>
-            हे खातं फक्त या लॅपटॉपवर आहे. पासवर्ड कुठेही पाठवला जात नाही.
+            This account exists on this laptop only. The password is never sent anywhere.
           </p>
         </div>
       </div>
@@ -135,39 +138,41 @@
         <header class="masthead">
           <svg class="mark" aria-hidden="true"><use href="#i-mark" /></svg>
           <div class="wordmark">
-            <b>आरोग्य वही</b>
-            <span>Arogya Vahi</span>
+            <b>Arogya Vahi</b>
+            <span>आरोग्य वही</span>
           </div>
           <button class="btn btn--quiet" id="open-guide" style="min-height: 44px; padding: 0 var(--s3)">
             <svg width="19" height="19"><use href="#i-book" /></svg>
-            मदत
+            Guide
           </button>
         </header>
 
         <p class="vow">
           <svg width="16" height="16"><use href="#i-shield" /></svg>
-          रिपोर्टमध्ये नसलेला आकडा हे अ‍ॅप कधीही सांगत नाही.
+          It never speaks a number it can't find in the report.
         </p>
 
         <!-- ---------------------------------------- summary -->
         <section class="screen" id="screen-home" aria-labelledby="home-h">
           <div class="card card--cyan">
             <p class="eyebrow" id="home-date">—</p>
-            <h1 id="home-h">आजचा सारांश</h1>
-            <div id="findings"></div>
+            <h1 id="home-h">What changed</h1>
+            <!-- The sentences below come from the server in Marathi, numbers filled by code.
+                 This is what the app says to her about her own results. -->
+            <div id="findings" lang="mr"></div>
             <div class="btn-row" style="margin-top: var(--s5)">
               <button class="btn btn--speak" id="speak" aria-pressed="false">
                 <svg width="20" height="20"><use href="#i-speak" /></svg>
-                <span id="speak-label">ऐका</span>
+                <span id="speak-label">Listen</span>
               </button>
             </div>
             <p class="note" id="home-tocheck" hidden></p>
           </div>
 
           <div class="card" id="home-questions-card" hidden>
-            <p class="eyebrow">डॉक्टरांना विचारा</p>
-            <h2>पुढच्या भेटीत हे विचारा</h2>
-            <ol class="steps" id="home-questions"></ol>
+            <p class="eyebrow">For the next visit</p>
+            <h2>Questions for the doctor</h2>
+            <ol class="steps" id="home-questions" lang="mr"></ol>
           </div>
 
           <div class="card" id="home-people-card" hidden>
@@ -178,30 +183,30 @@
         <!-- ---------------------------------------- add a report -->
         <section class="screen" id="screen-add" hidden aria-labelledby="add-h">
           <div class="card card--magenta">
-            <p class="eyebrow">नवीन रिपोर्ट</p>
-            <h1 id="add-h">रिपोर्ट जोडा</h1>
+            <p class="eyebrow">New report</p>
+            <h1 id="add-h">Add a report</h1>
             <p class="muted small">
-              WhatsApp वरून आलेला रिपोर्ट आधी फोनमध्ये साठवा, मग तो येथे निवडा.
+              Save the report from WhatsApp to your phone first, then pick it here.
             </p>
 
             <input class="file-pick" type="file" id="pick" multiple
                    accept="application/pdf,image/*" />
             <label class="btn btn--go btn--wide" for="pick" style="margin-top: var(--s4)">
               <svg width="21" height="21"><use href="#i-plus" /></svg>
-              फाइल निवडा
+              Choose a file
             </label>
 
             <details id="how-to-save">
               <summary>
                 <svg width="17" height="17"><use href="#i-phone" /></svg>
-                WhatsApp मधला रिपोर्ट फोनमध्ये कसा साठवायचा?
+                How do I save a report from WhatsApp?
               </summary>
               <ol class="steps">
-                <li>WhatsApp मध्ये रिपोर्टची PDF उघडा.</li>
-                <li>खाली <b>शेअर</b> (बाण) दाबा.</li>
-                <li><b>“Save to Files”</b> निवडा आणि <b>Save</b> दाबा.</li>
-                <li>येथे परत येऊन <b>फाइल निवडा</b> दाबा.</li>
-                <li><b>Browse</b> मधून तीच फाइल निवडा.</li>
+                <li>Open the report PDF in WhatsApp.</li>
+                <li>Tap <b>Share</b> (the arrow at the bottom).</li>
+                <li>Choose <b>Save to Files</b>, then tap <b>Save</b>.</li>
+                <li>Come back here and tap <b>Choose a file</b>.</li>
+                <li>Tap <b>Browse</b> and pick the same file.</li>
               </ol>
             </details>
 
@@ -209,11 +214,11 @@
           </div>
 
           <div class="card" id="queue-card" hidden>
-            <p class="eyebrow">चालू आहे</p>
-            <h2 id="queue-h">रिपोर्ट वाचत आहे</h2>
+            <p class="eyebrow">In progress</p>
+            <h2 id="queue-h">Reading</h2>
             <div id="queue"></div>
             <p class="small muted" style="margin-top: var(--s4)">
-              एक रिपोर्ट वाचायला काही मिनिटं लागतात. हे अ‍ॅप बंद केलं तरी वाचन चालू राहतं.
+              A report takes a few minutes to read. Closing this page does not stop it.
             </p>
           </div>
         </section>
@@ -221,9 +226,9 @@
         <!-- ---------------------------------------- timelines -->
         <section class="screen" id="screen-trend" hidden aria-labelledby="trend-h">
           <div class="card">
-            <p class="eyebrow">तपासणीनुसार</p>
-            <h1 id="trend-h">बदल</h1>
-            <p class="muted small">तपासणीचं नाव दाबा, म्हणजे तिचा आलेख दिसेल.</p>
+            <p class="eyebrow">By test</p>
+            <h1 id="trend-h">Changes</h1>
+            <p class="muted small">Tap a test to see its chart.</p>
             <div id="tests"></div>
           </div>
         </section>
@@ -231,10 +236,11 @@
         <!-- ---------------------------------------- questions -->
         <section class="screen" id="screen-ask" hidden aria-labelledby="ask-h">
           <div class="card card--amber">
-            <p class="eyebrow">तुमची खात्री हवी</p>
-            <h1 id="ask-h">तपासायचं आहे</h1>
+            <p class="eyebrow">Waiting for you</p>
+            <h1 id="ask-h">To check</h1>
             <p class="muted small">
-              खालचे आकडे अ‍ॅपला मूळ रिपोर्टमध्ये नक्की सापडले नाहीत. ते बरोबर आहेत का ते तुम्ही सांगा.
+              These values could not be found in the report with certainty. Please compare them
+              with the original and say whether they are right.
             </p>
             <div id="ask-list"></div>
           </div>
@@ -243,44 +249,44 @@
         <!-- ---------------------------------------- people -->
         <section class="screen" id="screen-people" hidden aria-labelledby="people-h">
           <div class="card">
-            <p class="eyebrow">घरातली माणसं</p>
-            <h1 id="people-h">कोणाचे रिपोर्ट</h1>
+            <p class="eyebrow">The family</p>
+            <h1 id="people-h">Whose reports</h1>
             <div id="people-list"></div>
           </div>
           <div class="card">
-            <p class="eyebrow">खातं</p>
+            <p class="eyebrow">Account</p>
             <h2 id="who">—</h2>
             <div class="btn-row">
-              <button class="btn" id="sign-out">बाहेर पडा</button>
-              <button class="btn btn--quiet" id="replay-guide">मदत पुन्हा पहा</button>
+              <button class="btn" id="sign-out">Sign out</button>
+              <button class="btn btn--quiet" id="replay-guide">Show the guide again</button>
             </div>
           </div>
         </section>
       </div>
 
       <!-- ---------------------------------------- tab bar -->
-      <nav class="tabs" role="tablist" aria-label="मुख्य">
+      <nav class="tabs" role="tablist" aria-label="Main">
         <button class="tab" role="tab" data-screen="home" aria-selected="true">
           <svg><use href="#i-home" /></svg>
-          सारांश
+          Summary
         </button>
         <button class="tab" role="tab" data-screen="add" aria-selected="false">
           <svg><use href="#i-plus" /></svg>
-          जोडा
+          Add
           <i class="dot" id="dot-add" hidden></i>
         </button>
         <button class="tab" role="tab" data-screen="trend" aria-selected="false">
           <svg><use href="#i-chart" /></svg>
-          बदल
+          Changes
         </button>
         <button class="tab" role="tab" data-screen="ask" aria-selected="false">
           <svg><use href="#i-ask" /></svg>
-          तपासा
+          Check
           <i class="dot" id="dot-ask" hidden></i>
         </button>
         <button class="tab" role="tab" data-screen="people" aria-selected="false">
           <svg><use href="#i-people" /></svg>
-          माणसं
+          People
         </button>
       </nav>
     </div>
@@ -288,8 +294,9 @@
     <!-- ============================================ the page picture -->
     <div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheet-h">
       <div class="sheet-bar">
-        <h2 id="sheet-h">मूळ रिपोर्ट</h2>
-        <button class="btn btn--quiet" id="sheet-close" style="min-height: 44px; padding: 0 var(--s3)">
+        <h2 id="sheet-h">The report</h2>
+        <button class="btn btn--quiet" id="sheet-close" aria-label="Close"
+                style="min-height: 44px; padding: 0 var(--s3)">
           <svg width="22" height="22"><use href="#i-close" /></svg>
         </button>
       </div>
@@ -306,8 +313,8 @@
         <div id="tour-body"></div>
         <div class="tour-dots" id="tour-dots"></div>
         <div class="btn-row">
-          <button class="btn btn--quiet" id="tour-skip">नंतर</button>
-          <button class="btn btn--go" id="tour-next">पुढे</button>
+          <button class="btn btn--quiet" id="tour-skip">Skip</button>
+          <button class="btn btn--go" id="tour-next">Next</button>
         </div>
       </div>
     </div>

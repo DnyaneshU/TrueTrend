@@ -1,11 +1,11 @@
 // Every request the page makes. Nothing else in the app knows a URL or a status code.
 //
 // The server is this laptop, so a failed request means the laptop is asleep or the
-// cable is out — not that something is wrong with her reports. The messages say so.
+// cable is out — not that something is wrong with the reports. The message says so.
 
-const OFFLINE = "लॅपटॉपशी संपर्क होत नाही. तो चालू आहे का ते पहा.";
+const OFFLINE = "Can't reach the laptop. Check that it is awake and Arogya Vahi is running.";
 
-/** A request that failed in a way the page should show her, in one Marathi sentence. */
+/** A request that failed in a way the page should show, in one sentence. */
 export class ApiError extends Error {
   constructor(message, status) {
     super(message);

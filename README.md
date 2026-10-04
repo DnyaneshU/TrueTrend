@@ -50,9 +50,16 @@ Each command is also `python -m arogya_vahi.<extract|summary|patients|recheck|se
 
 ## The web app
 
-`arogya-serve` opens the website at `http://127.0.0.1:8000`. It is in Marathi, built for
-a phone held by someone who is not looking for a computer, and it needs no internet: even
-the chart library is served from this computer.
+`arogya-serve` opens the website at `http://127.0.0.1:8000`. It is built for a phone held
+by someone who is not looking for a computer, and it needs no internet: even the chart
+library is served from this computer.
+
+**Two languages, on purpose.** The interface is English -- every label, button and screen
+name. What the app *says about her results* is Marathi: the summary sentences, the
+questions for the doctor, and the voice. Those are the sentences she is meant to read and
+hear, and they are built by the server from templates in
+`arogya_vahi/data/summary_mr.toml`, with every number filled in by code. The page never
+writes one of them itself; it passes them through as they come.
 
 The first person to open it makes an account, and after that the reports are behind it.
 The account is made here and only here -- sign-in is the OAuth 2.0 password grant served
@@ -61,17 +68,17 @@ leaves the laptop. A session lasts a year, so she signs in once on her phone.
 
 **The five screens**, along the bottom of the phone:
 
-| | | |
-|---|---|---|
-| **सारांश** | Summary | What changed in the latest report, in at most three sentences, with a **ऐका** button that reads them aloud, and the questions to ask at the next visit |
-| **जोडा** | Add | Pick a report from the phone, and watch it go रांगेत (queued) to वाचत आहे (reading) to तयार (ready). It shows the WhatsApp -> Save to Files steps for anyone who has not done it before |
-| **बदल** | Changes | One row per test with its latest value; tap it for the chart, the lab's normal range behind it, and every change judged as a real change or normal variation |
-| **तपासा** | Check | Everything waiting for a person: a value the code could not find, two patients who may be one person, the same report sent twice |
-| **माणसं** | People | Which report belongs to whom, and the account |
+| Screen | What it is for |
+|---|---|
+| **Summary** | What changed in the latest report, in at most three Marathi sentences, with a **Listen** button that reads them aloud, and the questions to ask at the next visit |
+| **Add** | Pick a report from the phone, and watch it go from Waiting to Reading to Done. It shows the WhatsApp -> Save to Files steps for anyone who has not done it before |
+| **Changes** | One row per test with its latest value; tap it for the chart, the lab's normal range behind it, and every change judged as a real change or normal variation |
+| **Check** | Everything waiting for a person: a value the code could not find, two patients who may be one person, the same report sent twice |
+| **People** | Which report belongs to whom, and the account |
 
 A first-time reader is shown a short guide -- what the app does, what each of the five
-keys is for, what each colour means, and that it never gives medical advice. It can be
-read again any time from **मदत**.
+buttons is for, what each colour means, and that it never gives medical advice. It can be
+read again any time from **Guide**.
 
 **Tapping a value shows where it is printed.** Safari ignores a PDF link's `#page=N`, so
 tapping a point on a chart would only ever open page 1 of a 19-page report. Instead the
@@ -79,8 +86,8 @@ server draws that page as a picture with the value ringed on it, so she sees the
 in its own row, in the lab's own layout.
 
 **On an iPhone**, she saves the report from WhatsApp (share -> Save to Files), opens the
-website, taps **रिपोर्ट जोडा** and picks it. On Android the browser's share sheet can send
-it straight to the app.
+website, taps **Add** and picks it. On Android the browser's share sheet can send it
+straight to the app.
 
 ## The server and its API
 
@@ -275,7 +282,7 @@ published for that test.
 | `patients.py`, `people.py` | Which family member a report is for (the `arogya-patients` command); printed names, sex and ages |
 | `server.py`, `web.py`, `ingest.py`, `jobs.py` | The web server and its API; who is signed in; files people send; the worker that reads them |
 | `accounts.py`, `highlight.py` | Accounts and sessions on this computer; a report page drawn with one value ringed |
-| `web/` | The website: `index.html`, `styles.css`, and `app.js` over `api.js` (requests), `mr.js` (Marathi text), `dom.js`, `chart.js`, `guide.js` |
+| `web/` | The website: `index.html`, `styles.css`, and `app.js` over `api.js` (requests), `text.js` (what the page says, and dates), `dom.js`, `chart.js`, `guide.js` |
 | `extract.py`, `recheck.py`, `cli.py` | The other commands, and what all commands share |
 | `db.py`, `schema.sql` | SQLite storage and migrations |
 | `lab_tests.py`, `dates.py`, `text.py`, `marathi.py` | The catalog; printed dates, numbers and names; Marathi numbers and dates |

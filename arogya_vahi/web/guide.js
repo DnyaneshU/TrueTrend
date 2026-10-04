@@ -1,74 +1,74 @@
 // The guide a first-time reader sees: what the app does, what each button means,
-// and what it will never do. Like a game's controls screen, before she needs it.
+// and what it will never do. Like a game's controls screen, before they need it.
 //
-// It runs once, remembers that it ran, and can be replayed from the मदत button.
-// Every page it shows is about something she can actually do here: a tour that
-// describes a feature the app does not have would be worse than no tour.
+// It runs once, remembers that it ran, and can be replayed from the Guide button.
+// Every page describes something the app actually does -- a tour that promises a
+// feature which does not exist would be worse than no tour at all.
 
-import { $, button, el, fill, icon, show } from "./dom.js";
+import { $, el, fill, icon, show } from "./dom.js";
 
 const SEEN = "arogya.guide.seen.v1";
 
-/** One page of the guide: a mark, a title, and what she needs to know. */
+/** One page of the guide: a mark, a title, and what the reader needs to know. */
 const PAGES = [
   {
     art: ["mark", 54],
-    step: "१ / ५",
-    title: "सगळे रिपोर्ट एका ठिकाणी",
+    step: "1 of 5",
+    title: "Every report in one place",
     body: [
-      "WhatsApp वर आलेले, जुने, नव्या लॅबचे — सगळे रक्त तपासणीचे रिपोर्ट या एका वहीत राहतात.",
-      "प्रत्येक तपासणीचा आकडा वर्षानुवर्षं एका रेषेत दिसतो, लॅब बदलली तरी.",
+      "Reports that arrive on WhatsApp, old ones, new ones from a different lab — they all live in one notebook here.",
+      "Each test gets one line across the years, even when the lab changes.",
     ],
   },
   {
     art: ["shield", 48],
-    step: "२ / ५",
-    title: "आकडा रिपोर्टमधूनच येतो",
+    step: "2 of 5",
+    title: "Every number comes from the report",
     body: [
-      "हे अ‍ॅप प्रत्येक आकडा मूळ रिपोर्टमध्ये शोधून बघतं. सापडला तरच तो सांगतं.",
-      "न सापडलेला आकडा “तपासा” मध्ये जातो आणि तुमची खात्री विचारतो. तो कधीही खरा म्हणून सांगितला जात नाही.",
+      "The app looks for each value in the original report. It only states a number it has found there.",
+      "A value it cannot find goes to Check, where you confirm it. It is never spoken as fact until you do.",
     ],
   },
   {
     art: ["chart", 48],
-    step: "३ / ५",
-    title: "खरा बदल, की नेहमीचा चढ-उतार?",
+    step: "3 of 5",
+    title: "A real change, or normal variation?",
     body: [
-      "दोन रिपोर्टमधला फरक नेहमीच्या चढ-उतारापेक्षा मोठा आहे का, हे अ‍ॅप आकडेमोड करून सांगतं.",
-      "म्हणून छोट्या फरकाची उगीच काळजी करावी लागत नाही.",
+      "Blood values move a little between tests even when nothing has changed. The app works out whether a difference is larger than that normal movement.",
+      "So a small difference does not become a worry, and a real one is not missed.",
     ],
     legend: [
-      ["badge--up", "खरी वाढ", "फरक नेहमीच्या चढ-उतारापेक्षा मोठा आहे"],
-      ["badge--down", "खरी घट", "आकडा खरोखर कमी झाला आहे"],
-      ["badge--flat", "नेहमीचा चढ-उतार", "काळजीचं कारण नाही"],
-      ["badge--check", "तपासायचं आहे", "तुमची खात्री हवी"],
+      ["badge--up", "Real increase", "larger than the normal movement for this test"],
+      ["badge--down", "Real decrease", "the value has genuinely come down"],
+      ["badge--flat", "Normal variation", "within what this test moves anyway"],
+      ["badge--check", "Needs checking", "waiting for you to confirm"],
     ],
   },
   {
     art: ["home", 48],
-    step: "४ / ५",
-    title: "खालच्या पाच कळा",
-    body: ["खाली दिसणाऱ्या पाच कळा — प्रत्येकीचं काम हे:"],
+    step: "4 of 5",
+    title: "The five buttons",
+    body: ["The five buttons along the bottom, and what each one is for:"],
     keys: [
-      ["home", "सारांश", "या रिपोर्टमध्ये काय बदललं, आणि डॉक्टरांना काय विचारायचं"],
-      ["plus", "जोडा", "नवीन रिपोर्टची फाइल द्या"],
-      ["chart", "बदल", "एका तपासणीचा आलेख — आकडा दाबल्यावर मूळ रिपोर्ट दिसतो"],
-      ["ask", "तपासा", "अ‍ॅपला खात्री नसलेले आकडे तुम्ही बघा"],
-      ["people", "माणसं", "कोणता रिपोर्ट कोणाचा"],
+      ["home", "Summary", "what changed in the latest report, and what to ask the doctor"],
+      ["plus", "Add", "send a new report from the phone"],
+      ["chart", "Changes", "one test's chart — tap a point to see it in the original report"],
+      ["ask", "Check", "values the app could not verify on its own"],
+      ["people", "People", "which report belongs to whom"],
     ],
   },
   {
     art: ["speak", 48],
-    step: "५ / ५",
-    title: "सारांश ऐकता येतो",
+    step: "5 of 5",
+    title: "The summary is spoken in Marathi",
     body: [
-      "“ऐका” दाबलं की सारांश मराठीत वाचून दाखवला जातो — वाचायची गरज नाही.",
-      "हे अ‍ॅप औषध किंवा उपचार सांगत नाही. फक्त काय बदललं ते सांगतं; बाकीचं डॉक्टरांना विचारा.",
+      "Tap Listen and the summary is read aloud in Marathi, so it does not have to be read off a screen.",
+      "The app gives no medical advice. It says what changed and how it compares with the lab's own range — everything else is for the doctor.",
     ],
   },
 ];
 
-/** A row of the key-map: the icon she will see, its name, and what it does. */
+/** A row of the key map: the icon as it appears on screen, its name, and what it does. */
 const keyRow = ([iconName, name, what]) =>
   el("li", el("span.key", icon(iconName, 22)), el("span", el("b", name), " — ", what));
 
@@ -95,7 +95,7 @@ export function openGuide(onDone) {
     );
 
     fill($("tour-dots"), PAGES.map((_, i) => el(`i${i === at ? ".on" : ""}`)));
-    $("tour-next").textContent = at === PAGES.length - 1 ? "सुरू करा" : "पुढे";
+    $("tour-next").textContent = at === PAGES.length - 1 ? "Start" : "Next";
     $("tour-skip").hidden = at === PAGES.length - 1;
   }
 
@@ -109,14 +109,18 @@ export function openGuide(onDone) {
     onDone?.();
   }
 
-  $("tour-next").onclick = () => (at === PAGES.length - 1 ? close() : (at += 1, draw()));
+  $("tour-next").onclick = () => {
+    if (at === PAGES.length - 1) return close();
+    at += 1;
+    draw();
+  };
   $("tour-skip").onclick = close;
   draw();
   show(tour, true);
   $("tour-next").focus();
 }
 
-/** Whether she has been shown the guide before. */
+/** Whether the guide has been shown on this device before. */
 export function guideSeen() {
   try {
     return localStorage.getItem(SEEN) === "1";

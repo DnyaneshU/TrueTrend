@@ -1,4 +1,9 @@
-// The website: five screens over the API, in Marathi, built for a phone.
+// The website: five screens over the API, built for a phone.
+//
+// The interface is English. What the app says about her results is Marathi -- the
+// summary sentences, the questions for the doctor, and the voice -- because that is
+// the point of the project. Those come from the server already written, with every
+// number filled in by code, and are passed through here untouched.
 //
 // The one rule that shapes this file: the page never works a number out. Every value
 // and every sentence it shows came from the server, which got it from a report it had
@@ -9,7 +14,7 @@ import * as api from "./api.js";
 import { $, badge, button, el, empty, fill, icon, note, show, whileWorking } from "./dom.js";
 import { drawTimeline } from "./chart.js";
 import { guideSeen, openGuide } from "./guide.js";
-import * as mr from "./mr.js";
+import * as t from "./text.js";
 
 const SCREENS = ["home", "add", "trend", "ask", "people"];
 const POLL_MS = 2500; // how often the add screen asks whether a report has been read
@@ -40,7 +45,7 @@ async function load(into, work) {
 
 /** One sentence of the summary, with a dot in the colour of what it says. */
 const findingLine = (sentence, kind) =>
-  el(`div.finding.tone-${mr.FINDING_TONE[kind] ?? "flat"}`, el("i.pip"), el("p", sentence));
+  el(`div.finding.tone-${t.FINDING_TONE[kind] ?? "flat"}`, el("i.pip"), el("p", sentence));
 
 async function drawHome() {
   await load($("findings"), async () => {
@@ -48,11 +53,11 @@ async function drawHome() {
     const sentences = summary.sentences ?? [];
 
     $("home-date").textContent = summary.latest_sample_date
-      ? `${mr.day(summary.latest_sample_date)} चा रिपोर्ट`
+      ? `Report of ${t.day(summary.latest_sample_date)}`
       : "—";
 
     if (!sentences.length) {
-      fill($("findings"), empty("book", mr.T.noReports, mr.T.noReportsHow));
+      fill($("findings"), empty("book", t.T.noReports, t.T.noReportsHow));
     } else {
       // The findings are in the same order as the sentences that were built from them;
       // a sentence past the last finding (there is never more than one) is a closing line.
@@ -68,8 +73,8 @@ async function drawHome() {
     if (toCheck > 0) {
       fill(
         $("home-tocheck"),
-        `या रिपोर्टमधले ${mr.digits(toCheck)} आकडे अजून तपासायचे आहेत. `,
-        button("“तपासा” मध्ये पहा", { className: "btn btn--quiet", onClick: () => go("ask") }),
+        `${toCheck} value${toCheck === 1 ? "" : "s"} in this report still need checking. `,
+        button("Open Check", { className: "btn btn--quiet", onClick: () => go("ask") }),
       );
     }
 
@@ -83,9 +88,10 @@ async function drawHome() {
     if (others.length) {
       fill(
         $("home-people"),
-        `${mr.digits(summary.reports_left_out)} रिपोर्ट वेगळ्या नावाचे आहेत (${others.join(", ")}), ` +
-          "म्हणून ते या सारांशात घेतलेले नाहीत. ",
-        button("“माणसं” मध्ये पहा", { className: "btn btn--quiet", onClick: () => go("people") }),
+        `${summary.reports_left_out} report${summary.reports_left_out === 1 ? "" : "s"} ` +
+          `name${summary.reports_left_out === 1 ? "s" : ""} someone else (${others.join(", ")}), ` +
+          "so they are left out of this summary. ",
+        button("Open People", { className: "btn btn--quiet", onClick: () => go("people") }),
       );
     }
 
@@ -112,7 +118,7 @@ const voice = {
 function setSpeaking(on) {
   voice.speaking = on;
   $("speak").setAttribute("aria-pressed", String(on));
-  $("speak-label").textContent = on ? mr.T.stop : mr.T.listen;
+  $("speak-label").textContent = on ? t.T.stop : t.T.listen;
 }
 
 function speak() {
@@ -120,6 +126,8 @@ function speak() {
     speechSynthesis.cancel();
     return setSpeaking(false);
   }
+  // What is spoken is the Marathi the server wrote, unchanged: this is the one place
+  // the app talks to her, and it must say exactly what the screen says.
   const lines = [...(state.summary?.sentences ?? [])];
   const questions = state.summary?.questions ?? [];
   if (questions.length) lines.push("डॉक्टरांना विचारा:", ...questions);
@@ -128,7 +136,7 @@ function speak() {
   const chosen = voice.pick();
   if (!chosen) {
     // No Marathi or Hindi voice on this phone: say so where she pressed, not silently.
-    fill($("home-tocheck"), mr.T.noVoice);
+    fill($("home-tocheck"), t.T.noVoice);
     return show($("home-tocheck"), true);
   }
 
@@ -171,8 +179,8 @@ function queueRow(upload) {
   const mark = reading
     ? el("i.spinner")
     : done
-      ? el("span.badge.badge--ok", icon("check", 14), mr.T.saved)
-      : badge(mr.T[upload.status] ?? upload.status, failed ? "badge--check" : "");
+      ? el("span.badge.badge--ok", icon("check", 14), t.T.saved)
+      : badge(t.T[upload.status] ?? upload.status, failed ? "badge--check" : "");
 
   return el(
     "div",
@@ -193,8 +201,8 @@ async function drawQueue() {
     const working = uploads.filter((u) => u.status === "queued" || u.status === "reading");
     busy = working.length;
     $("queue-h").textContent = busy
-      ? `${mr.digits(busy)} रिपोर्ट वाचत आहे`
-      : "वाचून झालेले रिपोर्ट";
+      ? `Reading ${busy} report${busy === 1 ? "" : "s"}`
+      : "Reports read";
     show($("dot-add"), busy > 0);
     fill($("queue"), uploads.slice(0, 8).map(queueRow));
   });
@@ -222,8 +230,8 @@ function stopPolling() {
 /** The newest change on a test, as the badge the list shows. */
 function lastChange(timeline) {
   const change = timeline.changes?.[timeline.changes.length - 1];
-  if (!change) return badge(mr.T.firstReport);
-  const kind = mr.CHANGE[change.kind] ?? mr.CHANGE.not_judged;
+  if (!change) return badge(t.T.firstReport);
+  const kind = t.CHANGE[change.kind] ?? t.CHANGE.not_judged;
   return badge(kind.text, kind.badge);
 }
 
@@ -235,10 +243,13 @@ function testRow(timeline, onOpen) {
   row.append(
     el(
       "span.test-name",
-      timeline.name_mr,
-      el("span.test-sub", `${mr.digits(timeline.points.length)} रिपोर्ट · ${mr.day(latest.sample_date)}`),
+      timeline.name,
+      el(
+        "span.test-sub",
+        `${t.T.reportsSuffix(timeline.points.length)} · ${t.day(latest.sample_date)}`,
+      ),
     ),
-    el("span.test-value", `${mr.digits(latest.value_text)} ${latest.unit ?? ""}`.trim()),
+    el("span.test-value", `${latest.value_text} ${latest.unit ?? ""}`.trim()),
     el("span.test-arrow", icon("chevron", 18)),
   );
   row.addEventListener("click", () => onOpen(timeline));
@@ -249,7 +260,7 @@ async function drawTrends() {
   await load($("tests"), async () => {
     const timelines = (state.timelines = await api.timelines());
     if (!timelines.length) {
-      return fill($("tests"), empty("chart", mr.T.noReports, mr.T.noReportsHow));
+      return fill($("tests"), empty("chart", t.T.noReports, t.T.noReportsHow));
     }
     fill(
       $("tests"),
@@ -266,27 +277,27 @@ function openTest(timeline) {
   const canvas = document.createElement("canvas");
   body.append(el("div.chart-wrap", canvas));
 
-  if (timeline.points.length < 2) body.append(note(mr.T.noTrendsYet));
+  if (timeline.points.length < 2) body.append(note(t.T.noTrendsYet));
 
   // Every change, newest first, with the threshold it was judged against.
   for (const change of [...(timeline.changes ?? [])].reverse()) {
-    const kind = mr.CHANGE[change.kind] ?? mr.CHANGE.not_judged;
+    const kind = t.CHANGE[change.kind] ?? t.CHANGE.not_judged;
     const line = el(
       "div.finding.tone-" + kind.tone,
       el("i.pip"),
       el(
         "div",
-        el("p", `${mr.day(change.before.sample_date)} → ${mr.day(change.after.sample_date)}`),
+        el("p", `${t.day(change.before.sample_date)} → ${t.day(change.after.sample_date)}`),
         el(
           "p.small.muted",
-          `${mr.digits(change.before.value_text)} → ${mr.digits(change.after.value_text)}`,
-          change.percent !== null ? ` (${mr.number(change.percent)}%)` : "",
-          !change.same_lab ? " · वेगळ्या लॅब" : "",
+          `${change.before.value_text} → ${change.after.value_text}`,
+          change.percent !== null ? ` (${t.number(change.percent)}%)` : "",
+          !change.same_lab ? " · different labs" : "",
         ),
         change.rcv_percent !== null &&
           el(
             "p.small.muted",
-            `नेहमीच्या चढ-उताराची मर्यादा: ${mr.number(Math.abs(change.rcv_percent))}%`,
+            `Normal movement for this test: up to ${t.number(Math.abs(change.rcv_percent))}%`,
           ),
         change.reason && el("p.small.muted", change.reason),
         el("div", badge(kind.text, kind.badge)),
@@ -306,19 +317,19 @@ function openTest(timeline) {
 /** The page of the original report where a value is printed, with the value ringed. */
 function showPrintedPage(point) {
   const picture = el("img");
-  picture.alt = `${mr.day(point.sample_date)} चा रिपोर्ट, पान ${mr.digits(point.page)}`;
+  picture.alt = `Report of ${t.day(point.sample_date)}, ${t.T.page(point.page)}`;
   picture.src = api.pagePicture(point.report_id, point.page, point.result_id);
 
   const body = el(
     "div",
     el(
       "p.small.muted",
-      `${mr.digits(point.value_text)} ${point.unit ?? ""} · ${point.lab_name ?? ""} · ` +
-        `पान ${mr.digits(point.page)}`,
+      `${point.value_text} ${point.unit ?? ""} · ${point.lab_name ?? ""} · ` +
+        `${t.T.page(point.page)}`,
     ),
     picture,
   );
-  openSheet(mr.day(point.sample_date), body);
+  openSheet(t.day(point.sample_date), body);
 }
 
 // ---------------------------------------------------------------- the questions screen
@@ -331,8 +342,8 @@ function valueToCheck(item, refresh) {
       await Promise.all([refresh(), drawHome()]);
     });
 
-  const yes = button(mr.T.yes, { className: "btn btn--yes", icon: "check" });
-  const no = button(mr.T.no, { className: "btn btn--no" });
+  const yes = button(t.T.yes, { className: "btn btn--yes", icon: "check" });
+  const no = button(t.T.no, { className: "btn btn--no" });
   yes.addEventListener("click", () => decide("verified", yes));
   no.addEventListener("click", () => decide("rejected", no));
 
@@ -344,16 +355,16 @@ function valueToCheck(item, refresh) {
       el("p", el("b", item.raw_name)),
       el(
         "p.test-value",
-        `${mr.digits(item.value_text)} ${item.unit ?? ""}`.trim(),
+        `${item.value_text} ${item.unit ?? ""}`.trim(),
       ),
       el(
         "p.small.muted",
-        `${item.lab_name ?? ""} · ${mr.day(item.sample_date)} · पान ${mr.digits(item.page)}`,
+        `${item.lab_name ?? ""} · ${t.day(item.sample_date)} · ${t.T.page(item.page)}`,
       ),
       item.notes?.length && el("p.small.muted", item.notes.join("; ")),
       el(
         "div.btn-row",
-        button(mr.T.showPage, {
+        button(t.T.showPage, {
           className: "btn btn--quiet",
           icon: "book",
           onClick: () =>
@@ -375,7 +386,7 @@ function valueToCheck(item, refresh) {
 
 /** "Is this the same person?" — two patients with one name the code would not merge. */
 function samePerson([first, second], refresh) {
-  const yes = button(mr.T.same, { className: "btn btn--yes" });
+  const yes = button(t.T.same, { className: "btn btn--yes" });
   yes.addEventListener("click", () =>
     whileWorking(yes, "…", async () => {
       await api.mergePatients(first.id, second.id);
@@ -387,8 +398,8 @@ function samePerson([first, second], refresh) {
     el("i.pip"),
     el(
       "div",
-      el("p", `“${first.display_name}” आणि “${second.display_name}” एकच व्यक्ती आहे का?`),
-      el("p.small.muted", "दोन्ही नावं सारखीच आहेत, पण रिपोर्टवरची माहिती जुळत नाही."),
+      el("p", `Is “${first.display_name}” the same person as “${second.display_name}”?`),
+      el("p.small.muted", "The names match, but something else on the reports does not."),
       el("div.btn-row", yes),
     ),
   );
@@ -396,7 +407,7 @@ function samePerson([first, second], refresh) {
 
 /** The same report sent twice: she may remove the second copy. */
 function duplicate([earlier, later], refresh) {
-  const remove = button(mr.T.removeDuplicate, { className: "btn btn--no" });
+  const remove = button(t.T.removeDuplicate, { className: "btn btn--no" });
   remove.addEventListener("click", () =>
     whileWorking(remove, "…", async () => {
       await api.deleteReport(later);
@@ -408,8 +419,8 @@ function duplicate([earlier, later], refresh) {
     el("i.pip"),
     el(
       "div",
-      el("p", `रिपोर्ट ${mr.digits(later)} हा रिपोर्ट ${mr.digits(earlier)} सारखाच दिसतो.`),
-      el("p.small.muted", "एकच लॅब, एकच तारीख, एकच व्यक्ती."),
+      el("p", `Report ${later} looks like the same report as ${earlier}.`),
+      el("p.small.muted", "Same person, same lab, same sample date."),
       el("div.btn-row", remove),
     ),
   );
@@ -426,7 +437,7 @@ async function drawAsk() {
     const waiting =
       questions.results_to_check.length + questions.same_person.length + questions.duplicates.length;
     show($("dot-ask"), waiting > 0);
-    fill($("ask-list"), items.length ? items : empty("check", mr.T.nothingToCheck));
+    fill($("ask-list"), items.length ? items : empty("check", t.T.nothingToCheck));
   });
 }
 
@@ -439,10 +450,10 @@ function personCard(patient) {
       "div.queue-item",
       el(
         "span.queue-name",
-        mr.day(report.sample_date ?? report.report_date),
+        t.day(report.sample_date ?? report.report_date),
         el("span.test-sub", report.lab_name ?? ""),
       ),
-      button("हा रिपोर्ट दुसऱ्याचा", {
+      button(t.T.moveReport, {
         className: "btn btn--quiet",
         onClick: async () => {
           await api.assignReport(report.report_id, null);
@@ -462,9 +473,9 @@ function personCard(patient) {
         el(
           "span.test-sub",
           [
-            patient.sex === "F" ? "स्त्री" : patient.sex === "M" ? "पुरुष" : null,
-            patient.birth_year ? `जन्म ~${mr.digits(patient.birth_year)}` : null,
-            `${mr.digits(patient.reports.length)} रिपोर्ट`,
+            patient.sex === "F" ? t.T.female : patient.sex === "M" ? t.T.male : null,
+            patient.birth_year ? t.T.bornAbout(patient.birth_year) : null,
+            t.T.reportsSuffix(patient.reports.length),
           ]
             .filter(Boolean)
             .join(" · "),
@@ -473,7 +484,7 @@ function personCard(patient) {
     ),
     ...lines,
     patient.aliases?.length &&
-      el("p.small.muted", `रिपोर्टवरची इतर नावं: ${patient.aliases.join(", ")}`),
+      el("p.small.muted", `${t.T.otherNames}: ${patient.aliases.join(", ")}`),
     el("hr.rule"),
   );
 }
@@ -487,26 +498,29 @@ async function drawPeople() {
       cards.push(
         el(
           "div",
-          el("h2", "कोणाचे हे नक्की नाही"),
+          el("h2", t.T.unmatched),
           ...listing.unmatched.map((report) =>
             el(
               "div.queue-item",
               el(
                 "span.queue-name",
-                report.name ?? "नाव नाही",
+                report.name ?? t.T.noName,
                 el(
                   "span.test-sub",
-                  `${mr.day(report.sample_date ?? report.report_date)} · ${report.lab_name ?? ""}`,
+                  `${t.day(report.sample_date ?? report.report_date)} · ${report.lab_name ?? ""}`,
                 ),
               ),
-              badge(mr.T.needs_check, "badge--check"),
+              badge(t.T.needs_check, "badge--check"),
             ),
           ),
         ),
       );
     }
 
-    fill($("people-list"), cards.length ? cards : empty("people", mr.T.noReports, mr.T.noReportsHow));
+    fill(
+      $("people-list"),
+      cards.length ? cards : empty("people", t.T.noReports, t.T.noReportsHow),
+    );
   });
 }
 
@@ -549,11 +563,11 @@ async function gate() {
   const first = !who.anyone;
   show($("app"), false);
   show($("gate"), true);
-  $("gate-title").textContent = first ? "सुरुवात करूया" : "स्वागत आहे";
+  $("gate-title").textContent = first ? "Let's set this up" : "Welcome back";
   $("gate-lede").textContent = first
-    ? "या लॅपटॉपवर तुमचं खातं तयार करा. नाव आणि पासवर्ड तुमच्या मनाचे ठेवा."
-    : "तुमचं नाव आणि पासवर्ड टाका.";
-  $("gate-submit").textContent = first ? "खातं तयार करा" : "आत या";
+    ? "Make an account on this laptop. Choose any name and password you like."
+    : "Enter your name and password.";
+  $("gate-submit").textContent = first ? "Create the account" : "Sign in";
   $("gate-password").autocomplete = first ? "new-password" : "current-password";
 
   $("gate-form").onsubmit = async (event) => {
@@ -562,7 +576,7 @@ async function gate() {
     const name = $("gate-name").value;
     const password = $("gate-password").value;
     try {
-      await whileWorking($("gate-submit"), "थांबा…", () =>
+      await whileWorking($("gate-submit"), "One moment…", () =>
         first ? api.signUp(name, password) : api.signIn(name, password),
       );
       $("gate-password").value = "";

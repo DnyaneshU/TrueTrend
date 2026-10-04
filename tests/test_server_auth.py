@@ -1,5 +1,7 @@
 """Signing in, staying signed in, and what a signed-out browser may not see."""
 
+import re
+
 import pytest
 from factories import saved_report, saved_result
 
@@ -197,5 +199,27 @@ def test_the_website_loads_nothing_from_the_internet(client):
 
 
 def test_the_app_is_one_module_per_job(client):
-    for module in ("api.js", "mr.js", "dom.js", "chart.js", "guide.js"):
+    for module in ("api.js", "text.js", "dom.js", "chart.js", "guide.js"):
         assert client.get(f"/{module}").status_code == 200
+
+
+DEVANAGARI = re.compile(r"[\u0900-\u097f]")
+
+
+def test_the_interface_is_english_and_only_what_is_spoken_is_marathi(client):
+    # The split the user asked for: labels, buttons and screens in English, and Marathi
+    # only where the app speaks to her about her own results. Those sentences are built
+    # by the server (summary.py), so the page's own files should carry almost no Marathi.
+    page = client.get("/").text
+    body = page.split("</svg>", 1)[1]  # past the icon definitions
+    marathi = {line.strip() for line in body.splitlines() if DEVANAGARI.search(line)}
+    # Only the wordmark, which shows the app's name in both scripts.
+    assert marathi == {"<span>आरोग्य वही</span>"}
+
+
+def test_the_app_speaks_marathi_about_the_results(client):
+    # The other half of the same rule: what is spoken must stay Marathi, and the only
+    # Marathi the page writes itself is the line that introduces the doctor's questions.
+    app_js = client.get("/app.js").text
+    spoken = [line.strip() for line in app_js.splitlines() if DEVANAGARI.search(line)]
+    assert len(spoken) == 1 and "डॉक्टरांना विचारा" in spoken[0]

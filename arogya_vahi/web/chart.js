@@ -4,7 +4,7 @@
 // Chart.js is served from vendor/, not a CDN: the app must work with no internet.
 // Nothing here computes a value — every number drawn comes from the server.
 
-import * as mr from "./mr.js";
+import * as t from "./text.js";
 
 const INK = {
   line: "#22e0d6",
@@ -16,8 +16,7 @@ const INK = {
   text: "#a7abc8",
 };
 
-Chart.defaults.font.family =
-  '"Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
+Chart.defaults.font.family = '"Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif';
 Chart.defaults.font.size = 12;
 Chart.defaults.color = INK.text;
 
@@ -40,7 +39,7 @@ export function drawTimeline(canvas, timeline, onPick) {
 
   const datasets = [
     {
-      label: timeline.name_mr,
+      label: timeline.name,
       data: points.map((p) => p.value_std ?? p.value),
       borderColor: INK.line,
       backgroundColor: INK.lineSoft,
@@ -61,7 +60,7 @@ export function drawTimeline(canvas, timeline, onPick) {
     const flat = (value) => points.map(() => value);
     datasets.push(
       {
-        label: "वरची मर्यादा",
+        label: "Upper limit",
         data: flat(band.high),
         borderColor: INK.bandEdge,
         borderWidth: 1,
@@ -73,7 +72,7 @@ export function drawTimeline(canvas, timeline, onPick) {
         order: 3,
       },
       {
-        label: "खालची मर्यादा",
+        label: "Lower limit",
         data: flat(band.low),
         borderColor: INK.bandEdge,
         borderWidth: 1,
@@ -88,7 +87,7 @@ export function drawTimeline(canvas, timeline, onPick) {
 
   const chart = new Chart(canvas, {
     type: "line",
-    data: { labels: points.map((p) => mr.shortDay(p.sample_date)), datasets },
+    data: { labels: points.map((p) => t.shortDay(p.sample_date)), datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -113,16 +112,16 @@ export function drawTimeline(canvas, timeline, onPick) {
           callbacks: {
             // Only the value's own dataset gets a tooltip; the band lines are scenery.
             filter: (item) => item.datasetIndex === 0,
-            title: (items) => mr.day(points[items[0].dataIndex].sample_date),
+            title: (items) => t.day(points[items[0].dataIndex].sample_date),
             label: (item) => {
               const p = points[item.dataIndex];
               const unit = p.unit_std || p.unit || "";
-              const lines = [`${mr.digits(p.value_text)} ${unit}`.trim()];
+              const lines = [`${p.value_text} ${unit}`.trim()];
               if (p.lab_name) lines.push(p.lab_name);
-              if (p.status !== "verified") lines.push(mr.T.needs_check);
+              if (p.status !== "verified") lines.push(t.T.needs_check);
               return lines;
             },
-            afterBody: () => "दाबा: मूळ रिपोर्टमध्ये पहा",
+            afterBody: () => "Tap to see it in the report",
           },
         },
       },
@@ -130,7 +129,6 @@ export function drawTimeline(canvas, timeline, onPick) {
         x: { grid: { color: INK.grid }, ticks: { maxRotation: 0, autoSkipPadding: 12 } },
         y: {
           grid: { color: INK.grid },
-          ticks: { callback: (value) => mr.digits(value) },
           title: { display: Boolean(timeline.unit), text: timeline.unit, color: INK.text },
         },
       },
