@@ -1,4 +1,6 @@
-# TrueTrend (आरोग्य वही)
+<p align="center">
+  <img src="docs/shots/logo-wide.png" alt="TrueTrend — आरोग्य वही" width="420">
+</p>
 
 Keeps a family's lab reports in one place, checks every value against the report it came
 from, and says in Marathi what changed and whether the change is real or normal
